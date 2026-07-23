@@ -1,0 +1,116 @@
+# 🚀 DOCSEDITZ — Deployment Guide
+
+## 0. Third-party services (one-time setup)
+
+### MongoDB Atlas
+1. Create a free cluster at [cloud.mongodb.com](https://cloud.mongodb.com).
+2. **Database Access** → create a user with password auth.
+3. **Network Access** → allow `0.0.0.0/0` (or your server's IP).
+4. Copy the connection string into `MONGODB_URI`, e.g.
+   `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/docseditz?retryWrites=true&w=majority`.
+
+### Cloudinary
+1. Sign up at [cloudinary.com](https://cloudinary.com) → Dashboard.
+2. Copy **Cloud name**, **API Key**, **API Secret** into `CLOUDINARY_*`.
+
+### Google OAuth
+1. [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials.
+2. **Create Credentials → OAuth client ID → Web application**.
+3. Authorized JavaScript origins: `http://localhost:5173`, plus your production domain.
+4. Copy the Client ID into both `GOOGLE_CLIENT_ID` (server) and `VITE_GOOGLE_CLIENT_ID` (client).
+
+### SMTP (OTP + password reset emails)
+Any SMTP provider works: Gmail (app password), Resend, SendGrid, Mailtrap (testing).
+Fill `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
+
+### OpenAI
+Create a key at [platform.openai.com](https://platform.openai.com/api-keys) → `OPENAI_API_KEY`.
+`gpt-4o-mini` (default) is fast and cheap; change with `OPENAI_MODEL`.
+
+---
+
+## Option A — Single VPS with Docker (recommended)
+
+Works on any Ubuntu/Debian VPS (Hetzner, DigitalOcean, EC2…).
+
+```bash
+# 1. Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# 2. Clone and configure
+git clone <your-repo> docseditz && cd docseditz
+cp server/.env.example server/.env
+nano server/.env        # fill in production values, set NODE_ENV=production
+
+# 3. Launch
+VITE_GOOGLE_CLIENT_ID=<your-client-id> docker compose up -d --build
+
+# 4. Seed an admin
+docker compose exec api npm run seed:admin -- admin@yourdomain.com StrongPass123 "Admin"
+```
+
+Put a reverse proxy with TLS in front (Caddy is the easiest):
+
+```bash
+sudo apt install caddy
+# /etc/caddy/Caddyfile
+#   yourdomain.com {
+#       reverse_proxy localhost:8080
+#   }
+sudo systemctl reload caddy
+```
+
+Then set in `server/.env`: `CLIENT_URL=https://yourdomain.com` and restart:
+`docker compose up -d`.
+
+> The API container bundles **LibreOffice**, so Office→PDF conversion works out of the box.
+
+---
+
+## Option B — Managed platforms (Render + Vercel)
+
+### Backend on Render
+1. New → **Web Service** → connect your repo, root directory `server`.
+2. Environment: **Docker** (uses `server/Dockerfile`, which includes LibreOffice).
+3. Add all variables from `server/.env.example` (set `NODE_ENV=production`,
+   `CLIENT_URL=https://<your-vercel-domain>`).
+4. Deploy → note the URL, e.g. `https://docseditz-api.onrender.com`.
+
+### Frontend on Vercel
+1. Import the repo → root directory `client` → framework **Vite**.
+2. Environment variables:
+   - `VITE_API_URL=https://docseditz-api.onrender.com/api/v1`
+   - `VITE_GOOGLE_CLIENT_ID=<your-client-id>`
+3. Deploy.
+
+> Cross-site cookies: the refresh cookie is issued with `SameSite=None; Secure` in
+> production, which works across Vercel ↔ Render domains. Make sure `CLIENT_URL`
+> on the backend exactly matches your frontend origin (no trailing slash).
+
+### Notes for Railway / Fly.io
+Both work the same way — deploy `server/` as a Docker service and the client
+anywhere static. Fly: `fly launch` inside `server/`.
+
+---
+
+## Production checklist
+
+- [ ] Strong, unique `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` (32+ random chars)
+- [ ] `NODE_ENV=production`
+- [ ] `CLIENT_URL` set to the exact frontend origin (CORS + cookies + emails depend on it)
+- [ ] Atlas network access restricted to your server IPs
+- [ ] HTTPS everywhere (required for Secure cookies and Google OAuth)
+- [ ] Google OAuth origins updated with the production domain
+- [ ] Admin account seeded (`npm run seed:admin`)
+- [ ] Cloudinary usage alerts configured
+- [ ] OpenAI usage limits set in the OpenAI dashboard
+- [ ] Health endpoint monitored: `GET /api/v1/health`
+
+## Scaling notes
+
+- The API is stateless (JWT + Cloudinary + Atlas) — scale horizontally behind a load balancer.
+  The only local state is temporary chunk-upload files; use sticky sessions or a shared
+  volume if you run multiple replicas.
+- OCR and `compress: strong/extreme` are CPU-heavy — consider a worker queue (BullMQ + Redis)
+  if they become hot paths.
+- Add a CDN (Cloudflare) in front of the frontend for global latency.

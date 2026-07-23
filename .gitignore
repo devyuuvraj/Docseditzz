@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.pnp/
+
+# Env
+.env
+.env.local
+.env.production
+
+# Builds
+dist/
+build/
+coverage/
+
+# Uploads / temp
+server/tmp/
+server/uploads/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

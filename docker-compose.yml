@@ -1,0 +1,40 @@
+services:
+  api:
+    build: ./server
+    container_name: docseditz-api
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      # In Docker, prefer the bundled Mongo unless MONGODB_URI points to Atlas
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/docseditz}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:8080}
+      PORT: 5000
+    depends_on:
+      - mongo
+    ports:
+      - "5000:5000"
+
+  web:
+    build:
+      context: ./client
+      args:
+        VITE_API_URL: /api/v1
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    container_name: docseditz-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+  mongo:
+    image: mongo:7
+    container_name: docseditz-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+
+volumes:
+  mongo-data:

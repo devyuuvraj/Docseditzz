@@ -1,0 +1,49 @@
+{
+  "name": "docseditz-server",
+  "version": "1.0.0",
+  "description": "DOCSEDITZ backend - AI powered document editing & conversion API",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "lint": "eslint src",
+    "seed:admin": "node src/scripts/seedAdmin.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@cantoo/pdf-lib": "^2.2.2",
+    "archiver": "^7.0.1",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.5.1",
+    "compression": "^1.7.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "docx": "^9.0.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "google-auth-library": "^9.15.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "libreoffice-convert": "^1.6.0",
+    "mammoth": "^1.8.0",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
+    "openai": "^4.77.0",
+    "pdf-parse": "^1.1.1",
+    "pdf-to-png-converter": "^3.6.2",
+    "sharp": "^0.33.5",
+    "tesseract.js": "^5.1.1",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
