@@ -31,7 +31,9 @@ export default function Login() {
     } catch (error) {
       if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
         toast('Verify your email first — we sent you a new code.', { icon: '📧' });
-        navigate('/verify-otp', { state: { email: values.email } });
+        navigate('/verify-otp', {
+          state: { email: values.email, devOtp: error.response.data.data?.devOtp },
+        });
         return;
       }
       toast.error(apiErrorMessage(error));

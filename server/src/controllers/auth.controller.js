@@ -34,6 +34,13 @@ const setOtp = async (user) => {
   return otp;
 };
 
+/**
+ * When SMTP is not configured in development, expose the OTP in the API
+ * response so the flow remains usable. Never happens in production.
+ */
+const devOtpPayload = (otp) =>
+  !config.isProd && !config.smtp.host ? { devOtp: otp } : {};
+
 /** POST /auth/register */
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
@@ -59,7 +66,7 @@ export const register = asyncHandler(async (req, res) => {
   res.status(201).json({
     success: true,
     message: 'Account created. Check your email for the verification code.',
-    data: { email },
+    data: { email, ...devOtpPayload(otp) },
   });
 });
 
@@ -101,7 +108,11 @@ export const resendOtp = asyncHandler(async (req, res) => {
 
   const otp = await setOtp(user);
   await sendOtpEmail(email, user.name, otp);
-  res.json({ success: true, message: 'A new verification code has been sent' });
+  res.json({
+    success: true,
+    message: 'A new verification code has been sent',
+    data: { email, ...devOtpPayload(otp) },
+  });
 });
 
 /** POST /auth/login */
@@ -119,7 +130,7 @@ export const login = asyncHandler(async (req, res) => {
       success: false,
       message: 'Email not verified. We sent you a new code.',
       code: 'EMAIL_NOT_VERIFIED',
-      data: { email },
+      data: { email, ...devOtpPayload(otp) },
     });
   }
 

@@ -16,6 +16,7 @@ export default function VerifyOtp() {
   const [digits, setDigits] = useState(Array(6).fill(''));
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [devOtp, setDevOtp] = useState(location.state?.devOtp || null);
   const inputs = useRef([]);
 
   useEffect(() => {
@@ -66,7 +67,8 @@ export default function VerifyOtp() {
 
   const resend = async () => {
     try {
-      await api.post('/auth/resend-otp', { email });
+      const { data } = await api.post('/auth/resend-otp', { email });
+      if (data.data?.devOtp) setDevOtp(data.data.devOtp);
       toast.success('New code sent');
       setCooldown(45);
     } catch (error) {
@@ -76,6 +78,17 @@ export default function VerifyOtp() {
 
   return (
     <AuthLayout title="Check your email" subtitle={`We sent a 6-digit code to ${email || 'your email'}`}>
+      {devOtp && (
+        <button
+          type="button"
+          onClick={() => setDigits(String(devOtp).split(''))}
+          className="mb-5 w-full rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-center text-sm text-amber-700 transition-colors hover:bg-amber-400/20 dark:text-amber-300"
+        >
+          <span className="font-bold">Dev mode</span> — email isn't configured, your code is{' '}
+          <span className="font-black tracking-widest">{devOtp}</span>
+          <span className="mt-0.5 block text-xs opacity-70">(tap to autofill)</span>
+        </button>
+      )}
       <div className="flex justify-center gap-2.5" onPaste={handlePaste}>
         {digits.map((digit, i) => (
           <input

@@ -21,9 +21,11 @@ export default function Register() {
 
   const onSubmit = async (values) => {
     try {
-      await api.post('/auth/register', values);
+      const { data } = await api.post('/auth/register', values);
       toast.success('Account created! Check your email for the code.');
-      navigate('/verify-otp', { state: { email: values.email } });
+      navigate('/verify-otp', {
+        state: { email: values.email, devOtp: data.data?.devOtp },
+      });
     } catch (error) {
       toast.error(apiErrorMessage(error));
     }
