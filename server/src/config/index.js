@@ -1,6 +1,10 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const required = (key, fallback = undefined) => {
   const value = process.env[key] ?? fallback;
@@ -16,11 +20,15 @@ export const config = {
   port: Number(process.env.PORT || 5000),
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
 
-  mongoUri: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/docseditz'),
-
   jwt: {
-    accessSecret: required('JWT_ACCESS_SECRET', 'dev_access_secret_do_not_use_in_prod'),
-    refreshSecret: required('JWT_REFRESH_SECRET', 'dev_refresh_secret_do_not_use_in_prod'),
+    accessSecret: required(
+      'JWT_ACCESS_SECRET',
+      'dev_access_secret_do_not_use_in_prod'
+    ),
+    refreshSecret: required(
+      'JWT_REFRESH_SECRET',
+      'dev_refresh_secret_do_not_use_in_prod'
+    ),
     accessExpires: process.env.JWT_ACCESS_EXPIRES || '15m',
     refreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
   },
@@ -41,12 +49,27 @@ export const config = {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET,
+    get enabled() {
+      return !!(this.cloudName && this.apiKey && this.apiSecret);
+    },
   },
 
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  /** Used automatically in development when Cloudinary is not configured. */
+  localStorageDir:
+    process.env.LOCAL_STORAGE_DIR || path.join(__dirname, '../../storage'),
+
+ openai: {
+  apiKey:
+    process.env.GEMINI_API_KEY,
+
+  model:
+    process.env.GEMINI_MODEL ||
+    'gemini-2.5-flash',
+
+  get enabled() {
+    return !!this.apiKey;
   },
+},
 
   limits: {
     maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 50),

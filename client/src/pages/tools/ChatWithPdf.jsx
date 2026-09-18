@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { MessageSquareText, Send, X, FileText, Sparkles } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/axios.js';
 import ToolShell from '../../components/tools/ToolShell.jsx';
+import AiSetupNotice from '../../components/tools/AiSetupNotice.jsx';
 import Dropzone from '../../components/upload/Dropzone.jsx';
 import Card from '../../components/ui/Card.jsx';
 import { cn, formatBytes } from '../../lib/utils.js';
@@ -60,6 +61,7 @@ export default function ChatWithPdf() {
       title="Chat with PDF"
       description="Ask questions and get answers grounded in your document."
     >
+      <AiSetupNotice />
       {!file ? (
         <Dropzone
           onFiles={(files) => setFile(files[0])}

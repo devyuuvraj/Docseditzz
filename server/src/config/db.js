@@ -1,21 +1,22 @@
-import mongoose from 'mongoose';
-import config from './index.js';
+import prisma from './prisma.js';
 
 export const connectDB = async () => {
-  mongoose.set('strictQuery', true);
   try {
-    const conn = await mongoose.connect(config.mongoUri, {
-      autoIndex: !config.isProd,
-    });
-    console.log(`[db] MongoDB connected: ${conn.connection.host}`);
+    await prisma.$connect();
+    console.log('[db] Neon PostgreSQL connected successfully');
   } catch (err) {
-    console.error('[db] MongoDB connection error:', err.message);
+    console.error('[db] PostgreSQL connection error:', err.message);
     process.exit(1);
   }
+};
 
-  mongoose.connection.on('disconnected', () => {
-    console.warn('[db] MongoDB disconnected');
-  });
+export const disconnectDB = async () => {
+  try {
+    await prisma.$disconnect();
+    console.log('[db] PostgreSQL disconnected');
+  } catch (err) {
+    console.error('[db] PostgreSQL disconnect error:', err.message);
+  }
 };
 
 export default connectDB;

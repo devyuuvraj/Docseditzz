@@ -7,6 +7,9 @@ import { Mail, Lock, User } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/axios.js';
 import { setCredentials } from '../../features/auth/authSlice.js';
 import AuthLayout from '../../components/layout/AuthLayout.jsx';
+import AuthEmailNotice from '../../components/auth/AuthEmailNotice.jsx';
+import AuthGoogleNotice from '../../components/auth/AuthGoogleNotice.jsx';
+import { googleAuthEnabled } from '../../lib/googleAuth.js';
 import Input from '../../components/ui/Input.jsx';
 import Button from '../../components/ui/Button.jsx';
 
@@ -44,6 +47,7 @@ export default function Register() {
 
   return (
     <AuthLayout title="Create your account" subtitle="Free forever. No credit card required.">
+      <AuthEmailNotice />
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
           label="Full name"
@@ -90,9 +94,13 @@ export default function Register() {
         <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
       </div>
 
-      <div className="flex justify-center">
-        <GoogleLogin onSuccess={onGoogle} onError={() => toast.error('Google sign-in failed')} width="320" />
-      </div>
+      {googleAuthEnabled ? (
+        <div className="flex justify-center">
+          <GoogleLogin onSuccess={onGoogle} onError={() => toast.error('Google sign-in failed')} width="320" />
+        </div>
+      ) : (
+        <AuthGoogleNotice />
+      )}
 
       <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
         Already have an account?{' '}

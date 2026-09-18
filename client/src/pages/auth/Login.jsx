@@ -7,6 +7,9 @@ import { Mail, Lock } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/axios.js';
 import { setCredentials } from '../../features/auth/authSlice.js';
 import AuthLayout from '../../components/layout/AuthLayout.jsx';
+import AuthEmailNotice from '../../components/auth/AuthEmailNotice.jsx';
+import AuthGoogleNotice from '../../components/auth/AuthGoogleNotice.jsx';
+import { googleAuthEnabled } from '../../lib/googleAuth.js';
 import Input from '../../components/ui/Input.jsx';
 import Button from '../../components/ui/Button.jsx';
 
@@ -30,7 +33,13 @@ export default function Login() {
       navigate(from, { replace: true });
     } catch (error) {
       if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-        toast('Verify your email first — we sent you a new code.', { icon: '📧' });
+        const devOtp = error.response.data.data?.devOtp;
+        toast(
+          devOtp
+            ? 'Verify your email first — your code is on the next screen (email is not configured yet).'
+            : 'Verify your email first — we sent you a new code.',
+          { icon: '📧' }
+        );
         navigate('/verify-otp', {
           state: { email: values.email, devOtp: error.response.data.data?.devOtp },
         });
@@ -53,6 +62,7 @@ export default function Login() {
 
   return (
     <AuthLayout title="Welcome back" subtitle="Log in to your DOCSEDITZ workspace">
+      <AuthEmailNotice />
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
           label="Email"
@@ -92,9 +102,13 @@ export default function Login() {
         <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
       </div>
 
-      <div className="flex justify-center">
-        <GoogleLogin onSuccess={onGoogle} onError={() => toast.error('Google sign-in failed')} width="320" />
-      </div>
+      {googleAuthEnabled ? (
+        <div className="flex justify-center">
+          <GoogleLogin onSuccess={onGoogle} onError={() => toast.error('Google sign-in failed')} width="320" />
+        </div>
+      ) : (
+        <AuthGoogleNotice />
+      )}
 
       <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
         New here?{' '}

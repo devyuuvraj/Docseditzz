@@ -6,6 +6,8 @@ import { upload } from '../middleware/upload.js';
 import { changePasswordRules } from '../validators/auth.validators.js';
 
 const router = Router();
+
+router.get('/:userId/avatar', user.getAvatar);
 router.use(protect);
 
 router.patch('/me', upload.single('avatar'), user.updateProfile);

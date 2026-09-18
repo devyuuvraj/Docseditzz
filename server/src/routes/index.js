@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import config from '../config/index.js';
+import { getAiHealth } from '../services/ai.service.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
 import documentRoutes from './document.routes.js';
@@ -13,7 +15,18 @@ import adminRoutes from './admin.routes.js';
 const router = Router();
 
 router.get('/health', (_req, res) =>
-  res.json({ success: true, status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() })
+  res.json({
+    success: true,
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    features: {
+      ai: config.openai.enabled,
+      aiStatus: getAiHealth(),
+      cloudStorage: config.cloudinary.enabled,
+      email: !!config.smtp.host,
+    },
+  })
 );
 
 router.use('/auth', authRoutes);

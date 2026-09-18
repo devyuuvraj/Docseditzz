@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                     String         @id @default(cuid())
+  name                   String
+  email                  String         @unique
+  password               String?
+  avatar                 String         @default("")
+  role                   Role           @default(user)
+  provider               Provider       @default(local)
+  googleId               String?        @unique
+  isVerified             Boolean        @default(false)
+  otpHash                String?
+  otpExpiresAt           DateTime?
+  otpAttempts            Int            @default(0)
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  tokenVersion           Int            @default(0)
+  plan                   Plan           @default(free)
+  storageUsed            BigInt         @default(0)
+  storageLimit           BigInt         @default(524288000)
+  preferences            Json           @default("{}")
+  isActive               Boolean        @default(true)
+  lastLoginAt            DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  activities             Activity[]
+  documents              Document[]
+  folders                Folder[]
+  shareLinks             ShareLink[]
+  subscriptions          Subscription[]
+
+  @@index([role])
+  @@index([plan])
+  @@index([createdAt])
+  @@index([lastLoginAt])
+}
+
+model Document {
+  id            String            @id @default(cuid())
+  ownerId       String
+  folderId      String?
+  name          String
+  originalName  String?
+  type          DocumentType      @default(other)
+  mimeType      String?
+  size          Int               @default(0)
+  pages         Int               @default(0)
+  url           String
+  publicId      String
+  thumbnail     String            @default("")
+  isFavorite    Boolean           @default(false)
+  isTrashed     Boolean           @default(false)
+  trashedAt     DateTime?
+  annotations   Json?
+  extractedText String?
+  lastOpenedAt  DateTime?
+  downloadCount Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  activities    Activity[]
+  folder        Folder?           @relation(fields: [folderId], references: [id])
+  owner         User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  versions      DocumentVersion[]
+  shareLinks    ShareLink[]
+
+  @@index([ownerId])
+  @@index([folderId])
+  @@index([type])
+  @@index([isFavorite])
+  @@index([isTrashed])
+  @@index([ownerId, isTrashed, updatedAt])
+  @@index([createdAt])
+}
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  documentId String
+  url        String
+  publicId   String
+  size       Int
+  label      String?
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([createdAt])
+}
+
+model Folder {
+  id        String     @id @default(cuid())
+  ownerId   String
+  name      String
+  color     String     @default("#6366f1")
+  parentId  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  documents Document[]
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parent    Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children  Folder[]   @relation("FolderHierarchy")
+
+  @@index([ownerId])
+  @@index([parentId])
+  @@index([ownerId, parentId])
+}
+
+model Activity {
+  id         String         @id @default(cuid())
+  userId     String
+  documentId String?
+  action     ActivityAction
+  meta       Json           @default("{}")
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  document   Document?      @relation(fields: [documentId], references: [id])
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([documentId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+}
+
+model ShareLink {
+  id           String    @id @default(cuid())
+  documentId   String
+  ownerId      String
+  token        String    @unique
+  isPublic     Boolean   @default(true)
+  passwordHash String?
+  expiresAt    DateTime?
+  views        Int       @default(0)
+  isRevoked    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([ownerId])
+  @@index([isRevoked])
+  @@index([expiresAt])
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  userId          String
+  plan            Plan
+  status          SubscriptionStatus @default(active)
+  priceMonthly    Float              @default(0)
+  currency        String             @default("USD")
+  startedAt       DateTime           @default(now())
+  expiresAt       DateTime?
+  cancelledAt     DateTime?
+  paymentProvider String             @default("manual")
+  externalId      String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([plan])
+  @@index([createdAt])
+  @@index([userId, status])
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum Provider {
+  local
+  google
+}
+
+enum Plan {
+  free
+  pro
+  business
+}
+
+enum SubscriptionStatus {
+  active
+  cancelled
+  expired
+  past_due
+}
+
+enum DocumentType {
+  pdf
+  docx
+  doc
+  image
+  xlsx
+  pptx
+  txt
+  html
+  other
+}
+
+enum ActivityAction {
+  upload
+  download
+  delete
+  restore
+  rename
+  duplicate
+  convert
+  merge
+  split
+  compress
+  edit
+  share
+  summarize
+  ocr
+  ai
+  login
+  register
+  password_change
+  folder_create
+  favorite
+  unfavorite
+  permanent_delete
+}

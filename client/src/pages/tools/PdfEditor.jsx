@@ -15,6 +15,7 @@ import api, { apiErrorMessage } from '../../lib/axios.js';
 import { getDocument as fetchDocMeta } from '../../services/files.service.js';
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts.js';
 import Dropzone from '../../components/upload/Dropzone.jsx';
+import AiSetupNotice from '../../components/tools/AiSetupNotice.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Modal from '../../components/ui/Modal.jsx';
 import Logo from '../../components/layout/Logo.jsx';
@@ -62,6 +63,7 @@ export default function PdfEditor() {
   const redoStackRef = useRef([]);
   const suppressHistoryRef = useRef(false);
   const imageInputRef = useRef(null);
+  const applyToolRef = useRef(() => {});
 
   const [docMeta, setDocMeta] = useState(null);
   const [loading, setLoading] = useState(!!documentId);
@@ -69,8 +71,28 @@ export default function PdfEditor() {
   const [pageNum, setPageNum] = useState(1);
   const [zoom, setZoom] = useState(1.4);
   const [tool, setTool] = useState('select');
+  const toolRef = useRef(tool);
+
+  useEffect(() => {
+    toolRef.current = tool;
+  }, [tool]);
   const [color, setColor] = useState('#ef4444');
   const [brushSize, setBrushSize] = useState(4);
+  const colorRef = useRef(color);
+  const brushSizeRef = useRef(brushSize);
+
+  const syncColor = useCallback((nextColor) => {
+    colorRef.current = nextColor;
+    setColor(nextColor);
+  }, []);
+
+  const syncBrushSize = useCallback((nextSize) => {
+    brushSizeRef.current = nextSize;
+    setBrushSize(nextSize);
+  }, []);
+
+  const lineThickness = (size = brushSizeRef.current) => Math.max(2, Math.round(size * 0.75));
+  const textFontSize = (size = brushSizeRef.current) => Math.max(12, Math.round(size * 1.8));
   const [hasSelection, setHasSelection] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -90,8 +112,17 @@ export default function PdfEditor() {
 
   const pushHistory = useCallback(() => {
     if (suppressHistoryRef.current || !fabricRef.current) return;
-    undoStackRef.current.push(JSON.stringify(fabricRef.current.toJSON()));
-    if (undoStackRef.current.length > 60) undoStackRef.current.shift();
+    const snapshot = JSON.stringify(fabricRef.current.toJSON());
+    const stack = undoStackRef.current;
+    if (stack[stack.length - 1] === snapshot) return;
+    stack.push(snapshot);
+    if (stack.length > 60) stack.shift();
+    redoStackRef.current = [];
+  }, []);
+
+  const seedHistory = useCallback((canvas = fabricRef.current) => {
+    if (!canvas) return;
+    undoStackRef.current = [JSON.stringify(canvas.toJSON())];
     redoStackRef.current = [];
   }, []);
 
@@ -100,21 +131,45 @@ export default function PdfEditor() {
     await fabricRef.current.loadFromJSON(JSON.parse(json));
     fabricRef.current.renderAll();
     suppressHistoryRef.current = false;
+    applyToolRef.current(toolRef.current, fabricRef.current);
   };
 
   const undo = useCallback(async () => {
-    if (undoStackRef.current.length < 1 || !fabricRef.current) return;
-    const current = JSON.stringify(fabricRef.current.toJSON());
-    const prev = undoStackRef.current.pop();
+    const stack = undoStackRef.current;
+    if (stack.length <= 1 || !fabricRef.current) return;
+    const current = stack.pop();
     redoStackRef.current.push(current);
-    await applyState(prev);
+    await applyState(stack[stack.length - 1]);
   }, []);
 
   const redo = useCallback(async () => {
     if (!redoStackRef.current.length || !fabricRef.current) return;
     const next = redoStackRef.current.pop();
-    undoStackRef.current.push(JSON.stringify(fabricRef.current.toJSON()));
+    undoStackRef.current.push(next);
     await applyState(next);
+  }, []);
+
+  const updateActiveObjectStyle = useCallback((canvas, { nextColor, nextSize } = {}) => {
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+
+    if (obj.type === 'i-text' || obj.type === 'textbox') {
+      if (nextColor) obj.set({ fill: nextColor });
+      if (nextSize) obj.set({ fontSize: textFontSize(nextSize) });
+    } else if (obj.type === 'rect' && (obj.height || 0) <= 12) {
+      if (nextColor) obj.set({ fill: nextColor });
+      if (nextSize) obj.set({ height: lineThickness(nextSize) });
+    } else if (nextColor && obj.stroke) {
+      obj.set({ stroke: nextColor });
+      if (obj.fill && obj.fill !== 'transparent') obj.set({ fill: nextColor });
+    } else if (nextColor && obj.fill && obj.fill !== 'transparent') {
+      obj.set({ fill: nextColor });
+    }
+
+    obj.setCoords();
+    canvas.fire('object:modified', { target: obj });
+    canvas.requestRenderAll();
   }, []);
 
   /* ---------------- Page rendering ---------------- */
@@ -157,6 +212,7 @@ export default function PdfEditor() {
       undoStackRef.current = [];
       redoStackRef.current = [];
 
+      canvas.on('path:created', pushHistory);
       canvas.on('object:added', pushHistory);
       canvas.on('object:modified', pushHistory);
       canvas.on('object:removed', pushHistory);
@@ -164,10 +220,11 @@ export default function PdfEditor() {
       canvas.on('selection:updated', () => setHasSelection(true));
       canvas.on('selection:cleared', () => setHasSelection(false));
 
+      seedHistory(canvas);
       applyTool(tool, canvas);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [zoom, tool, pushHistory]
+    [zoom, tool, pushHistory, seedHistory]
   );
 
   const openPdf = useCallback(
@@ -227,17 +284,20 @@ export default function PdfEditor() {
       toolHandlerRef.current = null;
     }
 
+    const activeColor = colorRef.current;
+    const activeSize = brushSizeRef.current;
+
     if (toolId === 'draw' || toolId === 'erase' || toolId === 'highlight') {
       const brush = new fabric.PencilBrush(canvas);
       if (toolId === 'draw') {
-        brush.color = color;
-        brush.width = brushSize;
+        brush.color = activeColor;
+        brush.width = activeSize;
       } else if (toolId === 'highlight') {
-        brush.color = color + '55';
-        brush.width = 18;
+        brush.color = activeColor + '55';
+        brush.width = Math.max(12, activeSize * 4);
       } else {
         brush.color = '#ffffff';
-        brush.width = brushSize * 4;
+        brush.width = activeSize * 4;
       }
       canvas.freeDrawingBrush = brush;
       canvas.isDrawingMode = true;
@@ -252,17 +312,21 @@ export default function PdfEditor() {
       canvas.on('mouse:down', handler);
     }
   };
+  applyToolRef.current = applyTool;
 
   const addObjectAt = (toolId, x, y, canvas) => {
+    const activeColor = colorRef.current;
+    const activeSize = brushSizeRef.current;
     let obj;
     if (toolId === 'underline' || toolId === 'strike') {
+      const height = lineThickness(activeSize);
       obj = new fabric.Rect({
-        left: x, top: y, width: 120, height: toolId === 'underline' ? 3 : 4,
-        fill: color, rx: 1.5, ry: 1.5,
+        left: x, top: y, width: 120, height,
+        fill: activeColor, rx: 1.5, ry: 1.5,
       });
     } else if (toolId === 'text') {
       obj = new fabric.IText('Edit me', {
-        left: x, top: y, fontSize: 18, fill: color, fontFamily: 'Helvetica',
+        left: x, top: y, fontSize: textFontSize(activeSize), fill: activeColor, fontFamily: 'Helvetica',
       });
     } else if (toolId === 'note') {
       const rect = new fabric.Rect({
@@ -276,16 +340,16 @@ export default function PdfEditor() {
     } else if (toolId === 'rect') {
       obj = new fabric.Rect({
         left: x, top: y, width: 120, height: 80, fill: 'transparent',
-        stroke: color, strokeWidth: 2.5, rx: 4, ry: 4,
+        stroke: activeColor, strokeWidth: Math.max(1.5, activeSize * 0.6), rx: 4, ry: 4,
       });
     } else if (toolId === 'circle') {
       obj = new fabric.Circle({
-        left: x, top: y, radius: 48, fill: 'transparent', stroke: color, strokeWidth: 2.5,
+        left: x, top: y, radius: 48, fill: 'transparent', stroke: activeColor, strokeWidth: Math.max(1.5, activeSize * 0.6),
       });
     } else if (toolId === 'arrow') {
-      const line = new fabric.Line([0, 0, 110, 0], { stroke: color, strokeWidth: 3 });
+      const line = new fabric.Line([0, 0, 110, 0], { stroke: activeColor, strokeWidth: Math.max(2, activeSize * 0.75) });
       const head = new fabric.Triangle({
-        left: 110, top: -7, width: 14, height: 14, angle: 90, fill: color,
+        left: 110, top: -7, width: 14, height: 14, angle: 90, fill: activeColor,
       });
       obj = new fabric.Group([line, head], { left: x, top: y });
     }
@@ -616,8 +680,9 @@ export default function PdfEditor() {
               <button
                 key={c}
                 onClick={() => {
-                  setColor(c);
+                  syncColor(c);
                   applyTool(tool);
+                  updateActiveObjectStyle(fabricRef.current, { nextColor: c });
                 }}
                 className={cn(
                   'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
@@ -630,19 +695,49 @@ export default function PdfEditor() {
           </div>
 
           <div className="my-2 h-px w-8 bg-slate-200 dark:bg-white/10" />
-          <input
-            type="range"
-            min={1}
-            max={20}
-            value={brushSize}
-            onChange={(e) => {
-              setBrushSize(Number(e.target.value));
-              applyTool(tool);
-            }}
-            className="h-20 w-6 accent-brand-600"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
-            title={`Brush size: ${brushSize}`}
-          />
+          <div className="flex flex-col items-center gap-1">
+            <span
+              className="rounded-full border border-slate-300 dark:border-white/20"
+              style={{
+                width: 18,
+                height: ['underline', 'strike'].includes(tool)
+                  ? lineThickness()
+                  : tool === 'text'
+                  ? Math.min(18, textFontSize() / 2)
+                  : Math.max(4, brushSize),
+                backgroundColor: color,
+              }}
+              title="Preview"
+            />
+            <input
+              type="range"
+              min={1}
+              max={20}
+              value={brushSize}
+              onChange={(e) => {
+                const nextSize = Number(e.target.value);
+                syncBrushSize(nextSize);
+                applyTool(tool);
+                updateActiveObjectStyle(fabricRef.current, { nextSize });
+              }}
+              className="h-20 w-6 accent-brand-600"
+              style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+              title={
+                tool === 'text'
+                  ? `Text size: ${textFontSize()}px`
+                  : ['underline', 'strike'].includes(tool)
+                  ? `Line thickness: ${lineThickness()}px`
+                  : `Brush size: ${brushSize}`
+              }
+            />
+            <span className="text-[10px] font-semibold text-slate-400">
+              {tool === 'text'
+                ? textFontSize()
+                : ['underline', 'strike'].includes(tool)
+                ? lineThickness()
+                : brushSize}
+            </span>
+          </div>
         </aside>
 
         {/* Canvas area */}
@@ -746,6 +841,7 @@ export default function PdfEditor() {
             </button>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto p-5">
+            <AiSetupNotice />
             <textarea
               value={aiText}
               onChange={(e) => setAiText(e.target.value)}

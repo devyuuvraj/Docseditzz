@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api, { apiErrorMessage } from '../../lib/axios.js';
 import ToolShell from '../../components/tools/ToolShell.jsx';
+import AiSetupNotice, { AiFallbackNotice } from '../../components/tools/AiSetupNotice.jsx';
 import Dropzone from '../../components/upload/Dropzone.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -92,6 +93,7 @@ export default function Summarizer() {
   const [insights, setInsights] = useState(null);
   const [flashcards, setFlashcards] = useState(null);
   const [quiz, setQuiz] = useState(null);
+  const [fallbackNotice, setFallbackNotice] = useState('');
 
   const makeForm = () => {
     const form = new FormData();
@@ -103,21 +105,28 @@ export default function Summarizer() {
     if (!file) return toast.error('Upload a document first');
     setLoading(true);
     try {
+      let notice = '';
       if (targetTab === 'summary') {
         const form = makeForm();
         form.append('mode', targetMode);
         const { data } = await api.post('/ai/summarize', form);
         setSummary(data.data.summary);
+        notice = data.data.notice || '';
       } else if (targetTab === 'insights') {
         const { data } = await api.post('/ai/insights', makeForm());
         setInsights(data.data.insights);
+        notice = data.data.notice || '';
       } else if (targetTab === 'flashcards') {
         const { data } = await api.post('/ai/flashcards', makeForm());
         setFlashcards(data.data.flashcards);
+        notice = data.data.notice || '';
       } else if (targetTab === 'quiz') {
         const { data } = await api.post('/ai/quiz', makeForm());
         setQuiz(data.data.questions);
+        notice = data.data.notice || '';
       }
+      setFallbackNotice(notice);
+      if (notice) toast(notice, { icon: 'ℹ️', duration: 6000 });
     } catch (error) {
       toast.error(apiErrorMessage(error));
     } finally {
@@ -152,6 +161,7 @@ export default function Summarizer() {
       title="AI Summarizer"
       description="Summaries, insights, flashcards and quizzes from any PDF or DOCX."
     >
+      <AiSetupNotice />
       {!file ? (
         <Dropzone
           onFiles={(files) => setFile(files[0])}
@@ -171,7 +181,7 @@ export default function Summarizer() {
             <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800 dark:text-white">
               {file.name} <span className="font-normal text-slate-400">({formatBytes(file.size)})</span>
             </p>
-            <button onClick={() => { setFile(null); setSummary(''); setInsights(null); setFlashcards(null); setQuiz(null); }} className="text-slate-400 hover:text-rose-500">
+            <button onClick={() => { setFile(null); setSummary(''); setInsights(null); setFlashcards(null); setQuiz(null); setFallbackNotice(''); }} className="text-slate-400 hover:text-rose-500">
               <X className="h-4 w-4" />
             </button>
           </Card>
@@ -193,6 +203,8 @@ export default function Summarizer() {
               </button>
             ))}
           </div>
+
+          <AiFallbackNotice notice={fallbackNotice} />
 
           {/* Summary tab */}
           {tab === 'summary' && (

@@ -7,6 +7,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from 'react-hot-toast';
 import store from './app/store.js';
 import App from './App.jsx';
+import { googleClientId } from './lib/googleAuth.js';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -15,25 +16,29 @@ const queryClient = new QueryClient({
   },
 });
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'missing-client-id';
+const app = (
+  <Provider store={store}>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            className:
+              '!bg-white !text-slate-800 dark:!bg-surface-800 dark:!text-slate-100 !rounded-xl !shadow-xl !border !border-slate-200 dark:!border-white/10',
+          }}
+        />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </Provider>
+);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Provider store={store}>
-      <QueryClientProvider client={queryClient}>
-        <GoogleOAuthProvider clientId={googleClientId}>
-          <BrowserRouter>
-            <App />
-            <Toaster
-              position="bottom-right"
-              toastOptions={{
-                className:
-                  '!bg-white !text-slate-800 dark:!bg-surface-800 dark:!text-slate-100 !rounded-xl !shadow-xl !border !border-slate-200 dark:!border-white/10',
-              }}
-            />
-          </BrowserRouter>
-        </GoogleOAuthProvider>
-      </QueryClientProvider>
-    </Provider>
+    {googleClientId ? (
+      <GoogleOAuthProvider clientId={googleClientId}>{app}</GoogleOAuthProvider>
+    ) : (
+      app
+    )}
   </React.StrictMode>
 );

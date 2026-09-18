@@ -4,7 +4,7 @@ import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
-import { logActivity } from '../models/Activity.js';
+import { logActivity } from '../utils/activity.js';
 import { saveBufferAsDocument, assertStorageAvailable } from './document.controller.js';
 import config from '../config/index.js';
 
@@ -30,9 +30,9 @@ export const initChunkUpload = asyncHandler(async (req, res) => {
   assertStorageAvailable(req.user, size);
 
   const uploadId = uuidv4();
-  await fs.mkdir(sessionDir(req.user._id, uploadId), { recursive: true });
+  await fs.mkdir(sessionDir(req.user.id, uploadId), { recursive: true });
   await fs.writeFile(
-    path.join(sessionDir(req.user._id, uploadId), 'meta.json'),
+    path.join(sessionDir(req.user.id, uploadId), 'meta.json'),
     JSON.stringify({ fileName, fileSize: size, mimeType, createdAt: Date.now() })
   );
   res.status(201).json({ success: true, data: { uploadId, chunkSize: 5 * 1024 * 1024 } });
@@ -46,7 +46,7 @@ export const uploadChunk = asyncHandler(async (req, res) => {
   if (!Number.isInteger(index) || index < 0 || index > 10000) throw ApiError.badRequest('Invalid chunkIndex');
   if (!req.file) throw ApiError.badRequest('No chunk data');
 
-  const dir = sessionDir(req.user._id, uploadId);
+  const dir = sessionDir(req.user.id, uploadId);
   try {
     await fs.access(dir);
   } catch {
@@ -64,7 +64,7 @@ export const completeChunkUpload = asyncHandler(async (req, res) => {
   const total = Number(totalChunks);
   if (!Number.isInteger(total) || total < 1) throw ApiError.badRequest('Invalid totalChunks');
 
-  const dir = sessionDir(req.user._id, uploadId);
+  const dir = sessionDir(req.user.id, uploadId);
   let meta;
   try {
     meta = JSON.parse(await fs.readFile(path.join(dir, 'meta.json'), 'utf-8'));
@@ -92,7 +92,7 @@ export const completeChunkUpload = asyncHandler(async (req, res) => {
     mimeType: meta.mimeType,
     folder: folder || null,
   });
-  await logActivity(req.user._id, 'upload', { document: doc._id, meta: { name: doc.name, chunked: true }, req });
+  await logActivity(req.user.id, 'upload', { document: doc.id, meta: { name: doc.name, chunked: true }, req });
 
   res.status(201).json({ success: true, message: 'Upload complete', data: { document: doc } });
 });

@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { sendBufferAsFile, MIME } from '../utils/sendFile.js';
-import { logActivity } from '../models/Activity.js';
+import { logActivity } from '../utils/activity.js';
 import { saveBufferAsDocument } from './document.controller.js';
 import * as pdf from '../services/pdf.service.js';
 import { officeToPdf, htmlToPdf, pdfToWord } from '../services/convert.service.js';
@@ -34,7 +34,7 @@ const respondWithFile = async (req, res, buffer, filename, mimeType, action = 'c
   if (req.body.save === 'true' || req.body.save === true) {
     await saveBufferAsDocument(req.user, buffer, { name: filename, mimeType });
   }
-  await logActivity(req.user._id, action, { meta: { output: filename, size: buffer.length }, req });
+  await logActivity(req.user.id, action, { meta: { output: filename, size: buffer.length }, req });
   sendBufferAsFile(res, buffer, filename, mimeType);
 };
 
@@ -359,7 +359,7 @@ export const ocr = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('OCR supports PDF and image files');
   }
 
-  await logActivity(req.user._id, 'ocr', { meta: { name: file.originalname, language }, req });
+  await logActivity(req.user.id, 'ocr', { meta: { name: file.originalname, language }, req });
   res.json({ success: true, data: { text, language } });
 });
 

@@ -1,41 +1,104 @@
-import Document from '../models/Document.js';
-import Folder from '../models/Folder.js';
-import { logActivity } from '../models/Activity.js';
+import prisma from '../config/prisma.js';
+
+import { logActivity } from '../utils/activity.js';
+
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
+
 import {
   uploadBuffer,
   downloadToBuffer,
   deleteResource,
   resourceTypeFor,
 } from '../services/storage.service.js';
+
 import { detectDocType } from '../middleware/upload.js';
 import { getPageCount } from '../services/pdf.service.js';
 
-const ownedDoc = async (id, userId, { includeTrashed = true } = {}) => {
-  const doc = await Document.findOne({ _id: id, owner: userId });
-  if (!doc) throw ApiError.notFound('Document not found');
-  if (!includeTrashed && doc.isTrashed) throw ApiError.notFound('Document is in trash');
+
+/* -------------------------------------------------------
+   Helpers
+------------------------------------------------------- */
+
+const ownedDoc = async (
+  id,
+  userId,
+  { includeTrashed = true } = {}
+) => {
+  const doc = await prisma.document.findFirst({
+    where: {
+      id,
+      ownerId: userId,
+    },
+  });
+
+  if (!doc) {
+    throw ApiError.notFound('Document not found');
+  }
+
+  if (!includeTrashed && doc.isTrashed) {
+    throw ApiError.notFound(
+      'Document is in trash'
+    );
+  }
+
   return doc;
 };
 
-export const assertStorageAvailable = (user, incomingBytes) => {
-  if (user.storageUsed + incomingBytes > user.storageLimit) {
-    throw new ApiError(413, 'Storage limit reached. Upgrade your plan or free up space.');
+
+export const assertStorageAvailable = (
+  user,
+  incomingBytes
+) => {
+  const used = BigInt(user.storageUsed);
+  const incoming = BigInt(incomingBytes);
+  const limit = BigInt(user.storageLimit);
+
+  if (used + incoming > limit) {
+    throw new ApiError(
+      413,
+      'Storage limit reached. Upgrade your plan or free up space.'
+    );
   }
 };
 
-/** Creates a Document record from an in-memory buffer (shared with tools "save to library"). */
-export const saveBufferAsDocument = async (user, buffer, { name, mimeType, folder = null }) => {
-  assertStorageAvailable(user, buffer.length);
-  const resourceType = resourceTypeFor(mimeType);
-  const uploaded = await uploadBuffer(buffer, {
-    folder: `docseditz/users/${user._id}`,
-    filename: name,
-    resourceType,
-  });
+
+/* -------------------------------------------------------
+   Create Document from Buffer
+------------------------------------------------------- */
+
+/**
+ * Creates a Document record from an in-memory buffer.
+ * Used by upload and "save to library" tools.
+ */
+export const saveBufferAsDocument = async (
+  user,
+  buffer,
+  {
+    name,
+    mimeType,
+    folder = null,
+  }
+) => {
+  assertStorageAvailable(
+    user,
+    buffer.length
+  );
+
+  const resourceType =
+    resourceTypeFor(mimeType);
+
+  const uploaded = await uploadBuffer(
+    buffer,
+    {
+      folder: `docseditz/users/${user.id}`,
+      filename: name,
+      resourceType,
+    }
+  );
 
   let pages = 0;
+
   if (mimeType === 'application/pdf') {
     try {
       pages = await getPageCount(buffer);
@@ -44,258 +107,1092 @@ export const saveBufferAsDocument = async (user, buffer, { name, mimeType, folde
     }
   }
 
-  const doc = await Document.create({
-    owner: user._id,
-    folder,
-    name,
-    originalName: name,
-    type: detectDocType(mimeType),
-    mimeType,
-    size: buffer.length,
-    pages,
-    url: uploaded.secure_url,
-    publicId: uploaded.public_id,
-    thumbnail: resourceType === 'image' ? uploaded.secure_url : '',
+  const doc = await prisma.document.create({
+    data: {
+      ownerId: user.id,
+      folderId: folder || null,
+
+      name,
+      originalName: name,
+
+      type: detectDocType(mimeType),
+
+      mimeType,
+      size: buffer.length,
+      pages,
+
+      url: uploaded.secure_url,
+      publicId: uploaded.public_id,
+
+      thumbnail:
+        resourceType === 'image'
+          ? uploaded.secure_url
+          : '',
+    },
   });
 
-  user.storageUsed += buffer.length;
-  await user.save({ validateBeforeSave: false });
+  /*
+   * Increase user's storage usage.
+   *
+   * Prisma storageUsed is BigInt, so use increment
+   * instead of modifying user.storageUsed directly.
+   */
+  await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      storageUsed: {
+        increment: BigInt(buffer.length),
+      },
+    },
+  });
+
+  /*
+   * Keep the in-memory user object updated because
+   * multiple files can be uploaded in one request.
+   */
+  user.storageUsed =
+    BigInt(user.storageUsed) +
+    BigInt(buffer.length);
+
   return doc;
 };
 
-/** POST /documents/upload (multipart, field: files[]) */
-export const uploadDocuments = asyncHandler(async (req, res) => {
-  const files = req.files?.length ? req.files : req.file ? [req.file] : [];
-  if (!files.length) throw ApiError.badRequest('No files uploaded');
 
-  const { folder } = req.body;
-  if (folder) {
-    const exists = await Folder.findOne({ _id: folder, owner: req.user._id });
-    if (!exists) throw ApiError.badRequest('Folder not found');
-  }
+/* -------------------------------------------------------
+   UPLOAD
+------------------------------------------------------- */
 
-  const docs = [];
-  for (const file of files) {
-    const doc = await saveBufferAsDocument(req.user, file.buffer, {
-      name: file.originalname,
-      mimeType: file.mimetype,
-      folder: folder || null,
+/** POST /documents/upload */
+export const uploadDocuments = asyncHandler(
+  async (req, res) => {
+    const files = req.files?.length
+      ? req.files
+      : req.file
+        ? [req.file]
+        : [];
+
+    if (!files.length) {
+      throw ApiError.badRequest(
+        'No files uploaded'
+      );
+    }
+
+    const { folder } = req.body;
+
+    if (folder) {
+      const exists =
+        await prisma.folder.findFirst({
+          where: {
+            id: folder,
+            ownerId: req.user.id,
+          },
+        });
+
+      if (!exists) {
+        throw ApiError.badRequest(
+          'Folder not found'
+        );
+      }
+    }
+
+    const docs = [];
+
+    for (const file of files) {
+      const doc =
+        await saveBufferAsDocument(
+          req.user,
+          file.buffer,
+          {
+            name: file.originalname,
+            mimeType: file.mimetype,
+            folder: folder || null,
+          }
+        );
+
+      docs.push(doc);
+
+      await logActivity(
+        req.user.id,
+        'upload',
+        {
+          document: doc.id,
+          meta: {
+            name: doc.name,
+            size: doc.size,
+          },
+          req,
+        }
+      );
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${docs.length} file(s) uploaded`,
+      data: {
+        documents: docs,
+      },
     });
-    docs.push(doc);
-    await logActivity(req.user._id, 'upload', { document: doc._id, meta: { name: doc.name, size: doc.size }, req });
   }
+);
 
-  res.status(201).json({ success: true, message: `${docs.length} file(s) uploaded`, data: { documents: docs } });
-});
+
+/* -------------------------------------------------------
+   LIST DOCUMENTS
+------------------------------------------------------- */
 
 /** GET /documents */
-export const listDocuments = asyncHandler(async (req, res) => {
-  const {
-    search,
-    folder,
-    favorite,
-    trashed,
-    type,
-    page = 1,
-    limit = 20,
-    sort = '-updatedAt',
-  } = req.query;
+export const listDocuments = asyncHandler(
+  async (req, res) => {
+    const {
+      search,
+      folder,
+      favorite,
+      trashed,
+      type,
+      page = 1,
+      limit = 20,
+      sort = '-updatedAt',
+    } = req.query;
 
-  const filter = { owner: req.user._id, isTrashed: trashed === 'true' };
-  if (search) filter.name = { $regex: String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-  if (folder === 'none') filter.folder = null;
-  else if (folder) filter.folder = folder;
-  if (favorite === 'true') filter.isFavorite = true;
-  if (type) filter.type = type;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
 
-  const allowedSorts = ['-updatedAt', 'updatedAt', 'name', '-name', '-size', 'size', '-createdAt', 'createdAt'];
-  const sortBy = allowedSorts.includes(sort) ? sort : '-updatedAt';
+    const where = {
+      ownerId: req.user.id,
 
-  const [documents, total] = await Promise.all([
-    Document.find(filter)
-      .sort(sortBy)
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
-      .populate('folder', 'name color'),
-    Document.countDocuments(filter),
-  ]);
+      isTrashed:
+        trashed === 'true',
+    };
 
-  res.json({
-    success: true,
-    data: { documents, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) } },
-  });
-});
+    /*
+     * MongoDB regex / i equivalent:
+     * Prisma contains + mode insensitive.
+     */
+    if (search) {
+      where.name = {
+        contains: String(search),
+        mode: 'insensitive',
+      };
+    }
+
+    if (folder === 'none') {
+      where.folderId = null;
+    } else if (folder) {
+      where.folderId = folder;
+    }
+
+    if (favorite === 'true') {
+      where.isFavorite = true;
+    }
+
+    if (type) {
+      where.type = type;
+    }
+
+    const sortMap = {
+      '-updatedAt': {
+        updatedAt: 'desc',
+      },
+
+      updatedAt: {
+        updatedAt: 'asc',
+      },
+
+      name: {
+        name: 'asc',
+      },
+
+      '-name': {
+        name: 'desc',
+      },
+
+      '-size': {
+        size: 'desc',
+      },
+
+      size: {
+        size: 'asc',
+      },
+
+      '-createdAt': {
+        createdAt: 'desc',
+      },
+
+      createdAt: {
+        createdAt: 'asc',
+      },
+    };
+
+    const orderBy =
+      sortMap[sort] ||
+      sortMap['-updatedAt'];
+
+    const [documents, total] =
+      await Promise.all([
+        prisma.document.findMany({
+          where,
+
+          orderBy,
+
+          skip:
+            (pageNumber - 1) *
+            limitNumber,
+
+          take: limitNumber,
+
+          include: {
+            folder: {
+              select: {
+                name: true,
+                color: true,
+              },
+            },
+          },
+        }),
+
+        prisma.document.count({
+          where,
+        }),
+      ]);
+
+    res.json({
+      success: true,
+
+      data: {
+        documents,
+
+        pagination: {
+          page: pageNumber,
+          limit: limitNumber,
+          total,
+          pages: Math.ceil(
+            total / limitNumber
+          ),
+        },
+      },
+    });
+  }
+);
+
+
+/* -------------------------------------------------------
+   RECENT DOCUMENTS
+------------------------------------------------------- */
 
 /** GET /documents/recent */
-export const recentDocuments = asyncHandler(async (req, res) => {
-  const documents = await Document.find({ owner: req.user._id, isTrashed: false })
-    .sort('-lastOpenedAt -updatedAt')
-    .limit(8);
-  res.json({ success: true, data: { documents } });
-});
+export const recentDocuments =
+  asyncHandler(async (req, res) => {
+    const documents =
+      await prisma.document.findMany({
+        where: {
+          ownerId: req.user.id,
+          isTrashed: false,
+        },
+
+        orderBy: [
+          {
+            lastOpenedAt: 'desc',
+          },
+          {
+            updatedAt: 'desc',
+          },
+        ],
+
+        take: 8,
+      });
+
+    res.json({
+      success: true,
+      data: {
+        documents,
+      },
+    });
+  });
+
+
+/* -------------------------------------------------------
+   GET DOCUMENT
+------------------------------------------------------- */
 
 /** GET /documents/:id */
-export const getDocument = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id);
-  doc.lastOpenedAt = new Date();
-  await doc.save({ validateBeforeSave: false });
-  res.json({ success: true, data: { document: doc } });
-});
+export const getDocument =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id
+    );
 
-/** GET /documents/:id/download - streams the original file */
-export const downloadDocument = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id);
-  const buffer = await downloadToBuffer(doc.url);
-  doc.downloadCount += 1;
-  await doc.save({ validateBeforeSave: false });
-  await logActivity(req.user._id, 'download', { document: doc._id, meta: { name: doc.name }, req });
+    const updatedDoc =
+      await prisma.document.update({
+        where: {
+          id: doc.id,
+        },
 
-  res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.name)}"`);
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
-  res.end(buffer);
-});
+        data: {
+          lastOpenedAt: new Date(),
+        },
+      });
 
-/** PATCH /documents/:id - rename / favorite / move folder */
-export const updateDocument = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id);
-  const { name, isFavorite, folder, annotations } = req.body;
+    res.json({
+      success: true,
+      data: {
+        document: updatedDoc,
+      },
+    });
+  });
 
-  if (name !== undefined) {
-    doc.name = String(name).trim().slice(0, 255);
-    await logActivity(req.user._id, 'rename', { document: doc._id, meta: { name: doc.name }, req });
-  }
-  if (isFavorite !== undefined) {
-    doc.isFavorite = !!isFavorite;
-    await logActivity(req.user._id, doc.isFavorite ? 'favorite' : 'unfavorite', { document: doc._id, req });
-  }
-  if (folder !== undefined) {
-    if (folder) {
-      const exists = await Folder.findOne({ _id: folder, owner: req.user._id });
-      if (!exists) throw ApiError.badRequest('Folder not found');
-      doc.folder = folder;
-    } else doc.folder = null;
-  }
-  if (annotations !== undefined) {
-    doc.annotations = annotations;
-  }
 
-  await doc.save();
-  res.json({ success: true, message: 'Document updated', data: { document: doc } });
-});
+/* -------------------------------------------------------
+   DOWNLOAD
+------------------------------------------------------- */
+
+/** GET /documents/:id/download */
+export const downloadDocument =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id
+    );
+
+    const buffer =
+      await downloadToBuffer(doc.url);
+
+    const updatedDoc =
+      await prisma.document.update({
+        where: {
+          id: doc.id,
+        },
+
+        data: {
+          downloadCount: {
+            increment: 1,
+          },
+        },
+      });
+
+    await logActivity(
+      req.user.id,
+      'download',
+      {
+        document: doc.id,
+        meta: {
+          name: doc.name,
+        },
+        req,
+      }
+    );
+
+    res.setHeader(
+      'Content-Type',
+      doc.mimeType ||
+        'application/octet-stream'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(
+        doc.name
+      )}"`
+    );
+
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'Content-Disposition'
+    );
+
+    res.end(buffer);
+  });
+
+
+/* -------------------------------------------------------
+   UPDATE DOCUMENT
+------------------------------------------------------- */
+
+/** PATCH /documents/:id */
+export const updateDocument =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id
+    );
+
+    const {
+      name,
+      isFavorite,
+      folder,
+      annotations,
+    } = req.body;
+
+    const data = {};
+
+    if (name !== undefined) {
+      data.name = String(name)
+        .trim()
+        .slice(0, 255);
+
+      await logActivity(
+        req.user.id,
+        'rename',
+        {
+          document: doc.id,
+          meta: {
+            name: data.name,
+          },
+          req,
+        }
+      );
+    }
+
+    if (isFavorite !== undefined) {
+      data.isFavorite = !!isFavorite;
+
+      await logActivity(
+        req.user.id,
+        data.isFavorite
+          ? 'favorite'
+          : 'unfavorite',
+        {
+          document: doc.id,
+          req,
+        }
+      );
+    }
+
+    if (folder !== undefined) {
+      if (folder) {
+        const exists =
+          await prisma.folder.findFirst({
+            where: {
+              id: folder,
+              ownerId: req.user.id,
+            },
+          });
+
+        if (!exists) {
+          throw ApiError.badRequest(
+            'Folder not found'
+          );
+        }
+
+        data.folderId = folder;
+      } else {
+        data.folderId = null;
+      }
+    }
+
+    if (annotations !== undefined) {
+      data.annotations = annotations;
+    }
+
+    const updatedDoc =
+      await prisma.document.update({
+        where: {
+          id: doc.id,
+        },
+
+        data,
+      });
+
+    res.json({
+      success: true,
+      message: 'Document updated',
+      data: {
+        document: updatedDoc,
+      },
+    });
+  });
+
+
+/* -------------------------------------------------------
+   DUPLICATE
+------------------------------------------------------- */
 
 /** POST /documents/:id/duplicate */
-export const duplicateDocument = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id, { includeTrashed: false });
-  const buffer = await downloadToBuffer(doc.url);
+export const duplicateDocument =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id,
+      {
+        includeTrashed: false,
+      }
+    );
 
-  const dotIdx = doc.name.lastIndexOf('.');
-  const copyName =
-    dotIdx > 0 ? `${doc.name.slice(0, dotIdx)} (copy)${doc.name.slice(dotIdx)}` : `${doc.name} (copy)`;
+    const buffer =
+      await downloadToBuffer(doc.url);
 
-  const copy = await saveBufferAsDocument(req.user, buffer, {
-    name: copyName,
-    mimeType: doc.mimeType,
-    folder: doc.folder,
+    const dotIdx =
+      doc.name.lastIndexOf('.');
+
+    const copyName =
+      dotIdx > 0
+        ? `${doc.name.slice(
+            0,
+            dotIdx
+          )} (copy)${doc.name.slice(dotIdx)}`
+        : `${doc.name} (copy)`;
+
+    const copy =
+      await saveBufferAsDocument(
+        req.user,
+        buffer,
+        {
+          name: copyName,
+          mimeType: doc.mimeType,
+          folder: doc.folderId,
+        }
+      );
+
+    await logActivity(
+      req.user.id,
+      'duplicate',
+      {
+        document: copy.id,
+        meta: {
+          from: doc.name,
+        },
+        req,
+      }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Document duplicated',
+      data: {
+        document: copy,
+      },
+    });
   });
-  await logActivity(req.user._id, 'duplicate', { document: copy._id, meta: { from: doc.name }, req });
-  res.status(201).json({ success: true, message: 'Document duplicated', data: { document: copy } });
-});
 
-/** POST /documents/:id/version - snapshot current file as a version, replace content */
-export const saveVersion = asyncHandler(async (req, res) => {
-  if (!req.file) throw ApiError.badRequest('No file provided');
-  const doc = await ownedDoc(req.params.id, req.user._id, { includeTrashed: false });
 
-  // keep old file as a version (cap at 10)
-  doc.versions.unshift({ url: doc.url, publicId: doc.publicId, size: doc.size, label: req.body.label || 'Auto save' });
-  doc.versions = doc.versions.slice(0, 10);
+/* -------------------------------------------------------
+   SAVE VERSION
+------------------------------------------------------- */
 
-  assertStorageAvailable(req.user, req.file.buffer.length);
-  const uploaded = await uploadBuffer(req.file.buffer, {
-    folder: `docseditz/users/${req.user._id}`,
-    filename: doc.name,
-    resourceType: resourceTypeFor(doc.mimeType),
-  });
-
-  req.user.storageUsed += req.file.buffer.length;
-  await req.user.save({ validateBeforeSave: false });
-
-  doc.url = uploaded.secure_url;
-  doc.publicId = uploaded.public_id;
-  doc.size = req.file.buffer.length;
-  if (req.body.annotations) {
-    try {
-      doc.annotations = JSON.parse(req.body.annotations);
-    } catch {
-      /* ignore malformed */
+/** POST /documents/:id/version */
+export const saveVersion =
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw ApiError.badRequest(
+        'No file provided'
+      );
     }
-  }
-  await doc.save();
-  await logActivity(req.user._id, 'edit', { document: doc._id, meta: { name: doc.name }, req });
 
-  res.json({ success: true, message: 'Saved', data: { document: doc } });
-});
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id,
+      {
+        includeTrashed: false,
+      }
+    );
+
+    /*
+     * Make sure enough storage exists for the
+     * new uploaded file.
+     */
+    assertStorageAvailable(
+      req.user,
+      req.file.buffer.length
+    );
+
+    /*
+     * Save the CURRENT file as a version.
+     */
+    await prisma.documentVersion.create({
+      data: {
+        documentId: doc.id,
+        url: doc.url,
+        publicId: doc.publicId,
+        size: doc.size,
+        label:
+          req.body.label ||
+          'Auto save',
+      },
+    });
+
+    /*
+     * Keep only latest 10 versions.
+     */
+    const versions =
+      await prisma.documentVersion.findMany({
+        where: {
+          documentId: doc.id,
+        },
+
+        orderBy: {
+          createdAt: 'desc',
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (versions.length > 10) {
+      const oldVersions =
+        versions.slice(10);
+
+      await prisma.documentVersion.deleteMany({
+        where: {
+          id: {
+            in: oldVersions.map(
+              (version) => version.id
+            ),
+          },
+        },
+      });
+    }
+
+    /*
+     * Upload new file.
+     */
+    const uploaded =
+      await uploadBuffer(
+        req.file.buffer,
+        {
+          folder: `docseditz/users/${req.user.id}`,
+          filename: doc.name,
+          resourceType:
+            resourceTypeFor(
+              doc.mimeType
+            ),
+        }
+      );
+
+    /*
+     * Increase storage usage.
+     */
+    await prisma.user.update({
+      where: {
+        id: req.user.id,
+      },
+
+      data: {
+        storageUsed: {
+          increment: BigInt(
+            req.file.buffer.length
+          ),
+        },
+      },
+    });
+
+    req.user.storageUsed =
+      BigInt(req.user.storageUsed) +
+      BigInt(req.file.buffer.length);
+
+    const updateData = {
+      url: uploaded.secure_url,
+      publicId: uploaded.public_id,
+      size: req.file.buffer.length,
+    };
+
+    if (req.body.annotations) {
+      try {
+        updateData.annotations =
+          JSON.parse(
+            req.body.annotations
+          );
+      } catch {
+        // Ignore malformed annotations.
+      }
+    }
+
+    const updatedDoc =
+      await prisma.document.update({
+        where: {
+          id: doc.id,
+        },
+
+        data: updateData,
+      });
+
+    await logActivity(
+      req.user.id,
+      'edit',
+      {
+        document: doc.id,
+        meta: {
+          name: doc.name,
+        },
+        req,
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Saved',
+      data: {
+        document: updatedDoc,
+      },
+    });
+  });
+
+
+/* -------------------------------------------------------
+   RESTORE VERSION
+------------------------------------------------------- */
 
 /** POST /documents/:id/restore-version/:versionId */
-export const restoreVersion = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id, { includeTrashed: false });
-  const version = doc.versions.id(req.params.versionId);
-  if (!version) throw ApiError.notFound('Version not found');
+export const restoreVersion =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id,
+      {
+        includeTrashed: false,
+      }
+    );
 
-  doc.versions.unshift({ url: doc.url, publicId: doc.publicId, size: doc.size, label: 'Before restore' });
-  doc.url = version.url;
-  doc.publicId = version.publicId;
-  doc.size = version.size;
-  doc.versions = doc.versions.filter((v) => v._id.toString() !== req.params.versionId).slice(0, 10);
-  await doc.save();
+    const version =
+      await prisma.documentVersion.findFirst({
+        where: {
+          id: req.params.versionId,
+          documentId: doc.id,
+        },
+      });
 
-  res.json({ success: true, message: 'Version restored', data: { document: doc } });
-});
+    if (!version) {
+      throw ApiError.notFound(
+        'Version not found'
+      );
+    }
 
-/** DELETE /documents/:id - soft delete (move to trash) */
-export const trashDocument = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id);
-  doc.isTrashed = true;
-  doc.trashedAt = new Date();
-  await doc.save();
-  await logActivity(req.user._id, 'delete', { document: doc._id, meta: { name: doc.name }, req });
-  res.json({ success: true, message: 'Moved to trash' });
-});
+    /*
+     * Save current document as a version
+     * before restoring the selected version.
+     */
+    await prisma.documentVersion.create({
+      data: {
+        documentId: doc.id,
+        url: doc.url,
+        publicId: doc.publicId,
+        size: doc.size,
+        label: 'Before restore',
+      },
+    });
+
+    /*
+     * Restore selected version.
+     */
+    const updatedDoc =
+      await prisma.document.update({
+        where: {
+          id: doc.id,
+        },
+
+        data: {
+          url: version.url,
+          publicId: version.publicId,
+          size: version.size,
+        },
+      });
+
+    /*
+     * Remove restored version, matching
+     * the old MongoDB behavior.
+     */
+    await prisma.documentVersion.delete({
+      where: {
+        id: version.id,
+      },
+    });
+
+    /*
+     * Keep only latest 10 versions.
+     */
+    const versions =
+      await prisma.documentVersion.findMany({
+        where: {
+          documentId: doc.id,
+        },
+
+        orderBy: {
+          createdAt: 'desc',
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (versions.length > 10) {
+      await prisma.documentVersion.deleteMany({
+        where: {
+          id: {
+            in: versions
+              .slice(10)
+              .map(
+                (version) =>
+                  version.id
+              ),
+          },
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Version restored',
+      data: {
+        document: updatedDoc,
+      },
+    });
+  });
+
+
+/* -------------------------------------------------------
+   TRASH
+------------------------------------------------------- */
+
+/** DELETE /documents/:id */
+export const trashDocument =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id
+    );
+
+    await prisma.document.update({
+      where: {
+        id: doc.id,
+      },
+
+      data: {
+        isTrashed: true,
+        trashedAt: new Date(),
+      },
+    });
+
+    await logActivity(
+      req.user.id,
+      'delete',
+      {
+        document: doc.id,
+        meta: {
+          name: doc.name,
+        },
+        req,
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Moved to trash',
+    });
+  });
+
+
+/* -------------------------------------------------------
+   RESTORE DOCUMENT
+------------------------------------------------------- */
 
 /** POST /documents/:id/restore */
-export const restoreDocument = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id);
-  doc.isTrashed = false;
-  doc.trashedAt = undefined;
-  await doc.save();
-  await logActivity(req.user._id, 'restore', { document: doc._id, meta: { name: doc.name }, req });
-  res.json({ success: true, message: 'Restored from trash', data: { document: doc } });
-});
+export const restoreDocument =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id
+    );
+
+    const updatedDoc =
+      await prisma.document.update({
+        where: {
+          id: doc.id,
+        },
+
+        data: {
+          isTrashed: false,
+          trashedAt: null,
+        },
+      });
+
+    await logActivity(
+      req.user.id,
+      'restore',
+      {
+        document: doc.id,
+        meta: {
+          name: doc.name,
+        },
+        req,
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Restored from trash',
+      data: {
+        document: updatedDoc,
+      },
+    });
+  });
+
+
+/* -------------------------------------------------------
+   PERMANENT DELETE
+------------------------------------------------------- */
 
 /** DELETE /documents/:id/permanent */
-export const permanentDelete = asyncHandler(async (req, res) => {
-  const doc = await ownedDoc(req.params.id, req.user._id);
-  await deleteResource(doc.publicId, resourceTypeFor(doc.mimeType));
-  for (const v of doc.versions) await deleteResource(v.publicId, resourceTypeFor(doc.mimeType));
+export const permanentDelete =
+  asyncHandler(async (req, res) => {
+    const doc = await ownedDoc(
+      req.params.id,
+      req.user.id
+    );
 
-  req.user.storageUsed = Math.max(0, req.user.storageUsed - doc.size);
-  await req.user.save({ validateBeforeSave: false });
-  await doc.deleteOne();
-  await logActivity(req.user._id, 'permanent_delete', { meta: { name: doc.name }, req });
-  res.json({ success: true, message: 'Permanently deleted' });
-});
+    /*
+     * Get versions before deleting the document.
+     */
+    const versions =
+      await prisma.documentVersion.findMany({
+        where: {
+          documentId: doc.id,
+        },
+      });
+
+    /*
+     * Delete current file.
+     */
+    await deleteResource(
+      doc.publicId,
+      resourceTypeFor(
+        doc.mimeType
+      )
+    );
+
+    /*
+     * Delete all version files.
+     */
+    for (const version of versions) {
+      await deleteResource(
+        version.publicId,
+        resourceTypeFor(
+          doc.mimeType
+        )
+      );
+    }
+
+    /*
+     * Reduce storage.
+     */
+    await prisma.user.update({
+      where: {
+        id: req.user.id,
+      },
+
+      data: {
+        storageUsed: {
+          decrement: BigInt(doc.size),
+        },
+      },
+    });
+
+    req.user.storageUsed =
+      BigInt(req.user.storageUsed) -
+      BigInt(doc.size);
+
+    /*
+     * Delete document.
+     *
+     * DocumentVersion records should be removed
+     * through the relation's cascade.
+     */
+    await prisma.document.delete({
+      where: {
+        id: doc.id,
+      },
+    });
+
+    await logActivity(
+      req.user.id,
+      'permanent_delete',
+      {
+        meta: {
+          name: doc.name,
+        },
+        req,
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Permanently deleted',
+    });
+  });
+
+
+/* -------------------------------------------------------
+   EMPTY TRASH
+------------------------------------------------------- */
 
 /** DELETE /documents/trash/empty */
-export const emptyTrash = asyncHandler(async (req, res) => {
-  const docs = await Document.find({ owner: req.user._id, isTrashed: true });
-  let freed = 0;
-  for (const doc of docs) {
-    await deleteResource(doc.publicId, resourceTypeFor(doc.mimeType));
-    freed += doc.size;
-    await doc.deleteOne();
-  }
-  req.user.storageUsed = Math.max(0, req.user.storageUsed - freed);
-  await req.user.save({ validateBeforeSave: false });
-  res.json({ success: true, message: `Trash emptied (${docs.length} files)` });
-});
+export const emptyTrash =
+  asyncHandler(async (req, res) => {
+    const docs =
+      await prisma.document.findMany({
+        where: {
+          ownerId: req.user.id,
+          isTrashed: true,
+        },
+      });
+
+    let freed = 0;
+
+    for (const doc of docs) {
+      const versions =
+        await prisma.documentVersion.findMany({
+          where: {
+            documentId: doc.id,
+          },
+        });
+
+      await deleteResource(
+        doc.publicId,
+        resourceTypeFor(
+          doc.mimeType
+        )
+      );
+
+      for (const version of versions) {
+        await deleteResource(
+          version.publicId,
+          resourceTypeFor(
+            doc.mimeType
+          )
+        );
+      }
+
+      freed += doc.size;
+
+      await prisma.document.delete({
+        where: {
+          id: doc.id,
+        },
+      });
+    }
+
+    if (freed > 0) {
+      await prisma.user.update({
+        where: {
+          id: req.user.id,
+        },
+
+        data: {
+          storageUsed: {
+            decrement: BigInt(freed),
+          },
+        },
+      });
+
+      req.user.storageUsed =
+        BigInt(req.user.storageUsed) -
+        BigInt(freed);
+    }
+
+    res.json({
+      success: true,
+      message: `Trash emptied (${docs.length} files)`,
+    });
+  });

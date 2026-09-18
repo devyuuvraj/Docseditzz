@@ -15,6 +15,7 @@ coverage/
 # Uploads / temp
 server/tmp/
 server/uploads/
+server/storage/
 *.log
 
 # OS / editor
@@ -22,3 +23,28 @@ server/uploads/
 Thumbs.db
 .idea/
 .vscode/
+
+
+
+
+
+# Personal project documents / reports
+Final_Year_Project_Report_Secure_MPLS_Enterprise_Network.docx
+Final_Year_Project_Report_Secure_MPLS_Enterprise_Network.pdf
+Final_Year_Viva_Presentation.pdf
+Final_Year_Viva_Presentation.pptx
+REPORT_REVIEW_NOTES_Contradictions.txt
+_report_extract/
+evaluation_form_filled.docx
+evaluation_form_filled.pdf
+docker-compose.zip
+
+# Local AI / editor configuration
+server/.agents/
+server/.claude/
+server/.windsurf/
+
+
+
+server/eng.traineddata
+server/skills-lock.json

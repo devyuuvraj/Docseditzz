@@ -41,6 +41,10 @@ export default function Profile() {
       const { data } = await api.patch('/users/me', form);
       dispatch(setUser(data.data.user));
       setAvatarFile(null);
+      if (avatarPreview) {
+        URL.revokeObjectURL(avatarPreview);
+        setAvatarPreview(null);
+      }
       toast.success('Profile updated');
     } catch (error) {
       toast.error(apiErrorMessage(error));

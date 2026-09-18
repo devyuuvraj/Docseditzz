@@ -3,7 +3,7 @@ import {
   StandardFonts,
   degrees,
   rgb,
-} from '@cantoo/pdf-lib';
+} from 'pdf-lib';
 import sharp from 'sharp';
 import archiver from 'archiver';
 import { pdfToPng } from 'pdf-to-png-converter';
