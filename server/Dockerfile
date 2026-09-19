@@ -11,12 +11,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
 
+RUN npm ci
+
+# Copy Prisma files
+COPY prisma ./prisma
+COPY prisma7.config.ts ./prisma7.config.ts
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Copy application source
 COPY src ./src
 
 ENV NODE_ENV=production
+
 EXPOSE 5000
 
 USER node
-CMD ["node", "src/server.js"]
+
+CMD ["npx", "tsx", "src/server.js"]
