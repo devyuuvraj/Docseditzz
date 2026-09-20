@@ -1,3 +1,9 @@
 {
-  "rewrites": [{ "source": "/((?!assets/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://docseditzz-production.up.railway.app/api/:path*"
+    },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
 }

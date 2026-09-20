@@ -1,9 +1,16 @@
 import axios from 'axios';
 
-const defaultProdApi = 'https://docseditzz-production.up.railway.app/api/v1';
-const baseURL =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? defaultProdApi : '/api/v1');
+function resolveApiBaseUrl() {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (import.meta.env.PROD) {
+    // Cross-origin Railway URL in env causes browser "Network Error" (CORS). Use Vercel proxy.
+    if (!envUrl || envUrl.startsWith('http')) return '/api/v1';
+    return envUrl;
+  }
+  return envUrl || '/api/v1';
+}
+
+const baseURL = resolveApiBaseUrl();
 
 export const api = axios.create({
   baseURL,

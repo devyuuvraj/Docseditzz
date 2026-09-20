@@ -101,7 +101,7 @@ Then set in `server/.env`: `CLIENT_URL=https://yourdomain.com` and restart:
 1. [vercel.com/new](https://vercel.com/new) → Import **`devyuuvraj/Docseditzz`**.
 2. **Root Directory:** `client` · Framework: **Vite** (auto-detected).
 3. **Environment variables** (Production):
-   - `VITE_API_URL` = `https://docseditzz-production.up.railway.app/api/v1`
+   - **Do not** set `VITE_API_URL` to the Railway URL (causes CORS). Leave unset or use `/api/v1` (proxied in `client/vercel.json`).
    - `VITE_GOOGLE_CLIENT_ID` = same as Railway `GOOGLE_CLIENT_ID`
 4. Deploy → copy the production URL, e.g. `https://docseditzz.vercel.app`.
 5. On **Railway** (API service), set:
