@@ -111,7 +111,9 @@ export default function Profile() {
               </div>
               <div>
                 <p className="font-bold text-slate-800 dark:text-white">{user?.name}</p>
-                <p className="text-sm text-slate-400">{user?.email}</p>
+                <p className="text-sm text-slate-400">
+                  {user?.provider === 'guest' ? 'Private to this browser' : user?.email}
+                </p>
                 <Badge variant="brand" className="mt-1 capitalize">{user?.plan} plan</Badge>
               </div>
             </div>
@@ -127,38 +129,47 @@ export default function Profile() {
           </form>
         </Card>
 
-        {/* Password */}
-        <Card>
-          <h2 className="mb-5 flex items-center gap-2 text-base font-bold text-slate-800 dark:text-white">
-            <Lock className="h-4 w-4 text-brand-500" /> Password
-          </h2>
-          <form onSubmit={passwordForm.handleSubmit(changePassword)} className="space-y-4">
-            {user?.provider !== 'google' && (
+        {user?.provider === 'local' && (
+          <Card>
+            <h2 className="mb-5 flex items-center gap-2 text-base font-bold text-slate-800 dark:text-white">
+              <Lock className="h-4 w-4 text-brand-500" /> Password
+            </h2>
+            <form onSubmit={passwordForm.handleSubmit(changePassword)} className="space-y-4">
               <Input
                 label="Current password"
                 type="password"
                 error={passwordForm.formState.errors.currentPassword?.message}
                 {...passwordForm.register('currentPassword', { required: 'Required' })}
               />
-            )}
-            <Input
-              label="New password"
-              type="password"
-              error={passwordForm.formState.errors.newPassword?.message}
-              {...passwordForm.register('newPassword', {
-                required: 'Required',
-                minLength: { value: 8, message: 'At least 8 characters' },
-                validate: {
-                  hasLetter: (v) => /[A-Za-z]/.test(v) || 'Must contain a letter',
-                  hasNumber: (v) => /\d/.test(v) || 'Must contain a number',
-                },
-              })}
-            />
-            <Button type="submit" loading={passwordForm.formState.isSubmitting}>
-              Update password
-            </Button>
-          </form>
-        </Card>
+              <Input
+                label="New password"
+                type="password"
+                error={passwordForm.formState.errors.newPassword?.message}
+                {...passwordForm.register('newPassword', {
+                  required: 'Required',
+                  minLength: { value: 8, message: 'At least 8 characters' },
+                  validate: {
+                    hasLetter: (v) => /[A-Za-z]/.test(v) || 'Must contain a letter',
+                    hasNumber: (v) => /\d/.test(v) || 'Must contain a number',
+                  },
+                })}
+              />
+              <Button type="submit" loading={passwordForm.formState.isSubmitting}>
+                Update password
+              </Button>
+            </form>
+          </Card>
+        )}
+
+        {user?.provider === 'guest' && (
+          <Card>
+            <h2 className="mb-2 text-base font-bold text-slate-800 dark:text-white">Your workspace</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Files and settings stay on this device and browser. Use <strong>New workspace</strong> in the
+              menu to start fresh.
+            </p>
+          </Card>
+        )}
       </div>
 
       {/* Subscription */}

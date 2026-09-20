@@ -14,17 +14,17 @@ const columns = [
   {
     title: 'Company',
     links: [
-      { label: 'Pricing', to: '/#pricing' },
-      { label: 'Testimonials', to: '/#testimonials' },
-      { label: 'FAQ', to: '/#faq' },
+      { label: 'Pricing', to: '/welcome#pricing' },
+      { label: 'Testimonials', to: '/welcome#testimonials' },
+      { label: 'FAQ', to: '/welcome#faq' },
     ],
   },
   {
-    title: 'Account',
+    title: 'Workspace',
     links: [
-      { label: 'Log in', to: '/login' },
-      { label: 'Sign up', to: '/signup' },
       { label: 'Dashboard', to: '/dashboard' },
+      { label: 'My files', to: '/files' },
+      { label: 'PDF tools', to: '/tools/pdf-tools' },
     ],
   },
 ];

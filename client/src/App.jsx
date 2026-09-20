@@ -7,23 +7,15 @@ import AdminRoute from './components/layout/AdminRoute.jsx';
 import DashboardLayout from './components/layout/DashboardLayout.jsx';
 import PageLoader from './components/ui/PageLoader.jsx';
 
-// Public
 const Landing = lazy(() => import('./pages/Landing.jsx'));
-const Login = lazy(() => import('./pages/auth/Login.jsx'));
-const Register = lazy(() => import('./pages/auth/Register.jsx'));
-const VerifyOtp = lazy(() => import('./pages/auth/VerifyOtp.jsx'));
-const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword.jsx'));
-const ResetPassword = lazy(() => import('./pages/auth/ResetPassword.jsx'));
 const SharedFile = lazy(() => import('./pages/SharedFile.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
-// App
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const MyFiles = lazy(() => import('./pages/MyFiles.jsx'));
 const Profile = lazy(() => import('./pages/Profile.jsx'));
 const Settings = lazy(() => import('./pages/Settings.jsx'));
 
-// Tools
 const ImagesToPdf = lazy(() => import('./pages/tools/ImagesToPdf.jsx'));
 const ConvertToPdf = lazy(() => import('./pages/tools/ConvertToPdf.jsx'));
 const PdfToWord = lazy(() => import('./pages/tools/PdfToWord.jsx'));
@@ -34,7 +26,6 @@ const PdfTools = lazy(() => import('./pages/tools/PdfTools.jsx'));
 const OcrTool = lazy(() => import('./pages/tools/OcrTool.jsx'));
 const ChatWithPdf = lazy(() => import('./pages/tools/ChatWithPdf.jsx'));
 
-// Admin
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard.jsx'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers.jsx'));
 const AdminDocuments = lazy(() => import('./pages/admin/AdminDocuments.jsx'));
@@ -51,7 +42,8 @@ export default function App() {
 
     const onLogout = () => {
       dispatch(clearCredentials());
-      navigate('/login');
+      dispatch(bootstrapSession());
+      navigate('/dashboard', { replace: true });
     };
     const onRefreshed = (e) => dispatch(setCredentials(e.detail));
 
@@ -68,17 +60,10 @@ export default function App() {
   return (
     <Suspense fallback={<PageLoader fullscreen />}>
       <Routes>
-        {/* Marketing (optional) */}
         <Route path="/welcome" element={<Landing />} />
-        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/verify-otp" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/forgot-password" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
         <Route path="/s/:token" element={<SharedFile />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-        {/* Authenticated app */}
         <Route element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -98,7 +83,6 @@ export default function App() {
             <Route path="/tools/ocr" element={<OcrTool />} />
             <Route path="/tools/chat" element={<ChatWithPdf />} />
 
-            {/* Admin */}
             <Route element={<AdminRoute />}>
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<AdminUsers />} />
@@ -108,12 +92,11 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* Full-bleed editor (no dashboard chrome) */}
           <Route path="/editor" element={<PdfEditor />} />
           <Route path="/editor/:documentId" element={<PdfEditor />} />
         </Route>
 
-        <Route path="/home" element={<Navigate to="/" replace />} />
+        <Route path="/home" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

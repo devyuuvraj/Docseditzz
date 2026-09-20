@@ -67,9 +67,9 @@ export default function Hero() {
           transition={{ duration: 0.6, delay: 0.3 }}
           className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
-          <Link to="/signup">
+          <Link to="/dashboard">
             <Button size="lg" className="group">
-              Start for free
+              Open workspace
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
           </Link>

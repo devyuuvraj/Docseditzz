@@ -83,7 +83,7 @@ export default function Pricing() {
                   </li>
                 ))}
               </ul>
-              <Link to="/signup" className="mt-8 block">
+              <Link to="/dashboard" className="mt-8 block">
                 <Button variant={plan.popular ? 'primary' : 'secondary'} className="w-full">
                   {plan.price === 0 ? 'Start free' : `Get ${plan.name}`}
                 </Button>

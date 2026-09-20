@@ -35,12 +35,12 @@ export default function Landing() {
             Join thousands of professionals who switched to the smarter, faster, more beautiful way
             to work with PDFs.
           </p>
-          <Link to="/signup" className="mt-8 inline-block">
+          <Link to="/dashboard" className="mt-8 inline-block">
             <Button
               size="lg"
               className="group !bg-white !from-white !to-white !text-brand-700 shadow-xl hover:!brightness-95"
             >
-              Create your free account
+              Open workspace
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
           </Link>
