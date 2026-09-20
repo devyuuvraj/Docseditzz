@@ -35,7 +35,7 @@ const start = async () => {
     }
   }
 
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, '0.0.0.0', () => {
     console.log(`[server] DOCSEDITZ API running on http://localhost:${config.port} (${config.env})`);
   });
 
