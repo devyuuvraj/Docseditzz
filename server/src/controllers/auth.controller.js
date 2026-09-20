@@ -113,34 +113,41 @@ const devResetPayload = (resetUrl) =>
     : {};
 
 /* -------------------------------------------------------
-   GUEST (passwordless browser workspace)
+   Passwordless browser workspace (no SMTP, no OTP)
 ------------------------------------------------------- */
 
-/** POST /auth/guest — new private workspace for this browser (cookie-backed). */
-export const createGuest = asyncHandler(async (req, res) => {
+const createPasswordlessUser = async (provider = 'local') => {
   const email = `guest_${crypto.randomUUID()}@session.docseditz.local`;
+  const passwordHash = await bcrypt.hash(crypto.randomUUID(), 12);
 
-  const user = await prisma.user.create({
-    data: {
-      name: 'Guest',
-      email,
-      provider: 'guest',
-      isVerified: true,
-      plan: 'free',
-    },
-  });
+  try {
+    const user = await prisma.user.create({
+      data: {
+        name: 'Guest',
+        email,
+        password: passwordHash,
+        provider,
+        isVerified: true,
+        plan: 'free',
+      },
+    });
 
-  await prisma.subscription.create({
-    data: {
-      userId: user.id,
-      plan: 'free',
-    },
-  });
+    await prisma.subscription.create({
+      data: { userId: user.id, plan: 'free' },
+    });
 
+    return user;
+  } catch (err) {
+    if (provider === 'guest') {
+      return createPasswordlessUser('local');
+    }
+    throw err;
+  }
+};
+
+const respondWithSession = async (req, res, user, meta) => {
   const accessToken = issueSession(res, user);
-
-  await logActivity(user.id, 'login', { req, meta: { guest: true } });
-
+  await logActivity(user.id, 'login', { req, meta });
   res.status(201).json({
     success: true,
     data: {
@@ -148,6 +155,18 @@ export const createGuest = asyncHandler(async (req, res) => {
       user: toSafeJSON(user),
     },
   });
+};
+
+/** POST /auth/session — preferred entry for Vercel dashboard (no body, no email). */
+export const startBrowserSession = asyncHandler(async (req, res) => {
+  const user = await createPasswordlessUser('local');
+  await respondWithSession(req, res, user, { browserSession: true });
+});
+
+/** POST /auth/guest — alias; uses guest provider when DB enum allows. */
+export const createGuest = asyncHandler(async (req, res) => {
+  const user = await createPasswordlessUser('guest');
+  await respondWithSession(req, res, user, { guest: true });
 });
 
 /* -------------------------------------------------------

@@ -14,6 +14,7 @@ import {
 
 const router = Router();
 
+router.post('/session', authLimiter, auth.startBrowserSession);
 router.post('/guest', authLimiter, auth.createGuest);
 router.post('/register', authLimiter, validate(registerRules), auth.register);
 router.post('/verify-otp', otpLimiter, validate(otpRules), auth.verifyOtp);
