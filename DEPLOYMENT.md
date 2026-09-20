@@ -76,12 +76,22 @@ Then set in `server/.env`: `CLIENT_URL=https://yourdomain.com` and restart:
    `CLIENT_URL=https://<your-vercel-domain>`).
 4. Deploy → note the URL, e.g. `https://docseditz-api.onrender.com`.
 
-### Frontend on Vercel
-1. Import the repo → root directory `client` → framework **Vite**.
-2. Environment variables:
-   - `VITE_API_URL=https://docseditz-api.onrender.com/api/v1`
-   - `VITE_GOOGLE_CLIENT_ID=<your-client-id>`
-3. Deploy.
+### Frontend on Vercel (with Railway API)
+
+**Backend URL (already deployed):** `https://docseditzz-production.up.railway.app`
+
+1. [vercel.com/new](https://vercel.com/new) → Import **`devyuuvraj/Docseditzz`**.
+2. **Root Directory:** `client` · Framework: **Vite** (auto-detected).
+3. **Environment variables** (Production):
+   - `VITE_API_URL` = `https://docseditzz-production.up.railway.app/api/v1`
+   - `VITE_GOOGLE_CLIENT_ID` = same as Railway `GOOGLE_CLIENT_ID`
+4. Deploy → copy the production URL, e.g. `https://docseditzz.vercel.app`.
+5. On **Railway** (API service), set:
+   - `CLIENT_URL` = your Vercel URL (no trailing slash)
+   - `CORS_ORIGINS` = same Vercel URL (comma-separate preview URLs if needed)
+6. Redeploy the Railway service once.
+
+Open the **Vercel URL** in a browser — that is the public Docseditzz app. The Railway URL is API-only unless you use the root Dockerfile full-stack image.
 
 > Cross-site cookies: the refresh cookie is issued with `SameSite=None; Secure` in
 > production, which works across Vercel ↔ Render domains. Make sure `CLIENT_URL`

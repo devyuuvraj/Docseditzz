@@ -19,6 +19,11 @@ export const config = {
   isProd: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT || 5000),
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  /** Comma-separated browser origins allowed by CORS (defaults to CLIENT_URL). */
+  corsOrigins: (process.env.CORS_ORIGINS || process.env.CLIENT_URL || 'http://localhost:5173')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
   /** When true, serve the built Vite app from ./public (Railway full-stack image). */
   serveWeb: process.env.SERVE_WEB === 'true',
 
