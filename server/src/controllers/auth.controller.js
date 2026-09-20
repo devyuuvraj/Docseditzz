@@ -154,9 +154,55 @@ export const createGuest = asyncHandler(async (req, res) => {
    REGISTER
 ------------------------------------------------------- */
 
+const SESSION_EMAIL_SUFFIX = '@session.docseditz.local';
+const isBrowserSessionEmail = (email) =>
+  typeof email === 'string' && email.endsWith(SESSION_EMAIL_SUFFIX);
+
 /** POST /auth/register */
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
+
+  if (isBrowserSessionEmail(email)) {
+    const hashedPassword = await bcrypt.hash(password, 12);
+    let user = await prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          name: name || user.name,
+          password: hashedPassword,
+          isVerified: true,
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          name: name || 'Guest',
+          email,
+          password: hashedPassword,
+          provider: 'local',
+          isVerified: true,
+          plan: 'free',
+        },
+      });
+
+      await prisma.subscription.create({
+        data: { userId: user.id, plan: 'free' },
+      });
+    }
+
+    const accessToken = issueSession(res, user);
+    await logActivity(user.id, 'login', { req, meta: { browserSession: true } });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        accessToken,
+        user: toSafeJSON(user),
+      },
+    });
+  }
 
   const existing = await prisma.user.findUnique({
     where: {

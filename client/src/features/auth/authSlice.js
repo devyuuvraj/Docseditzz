@@ -1,18 +1,9 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api, { setAccessToken } from '../../lib/axios.js';
+import { runBootstrapSession } from './bootstrapSession.js';
 
 /** Restore cookie session or create a new guest workspace (no login UI). */
-export const bootstrapSession = createAsyncThunk('auth/bootstrap', async () => {
-  try {
-    const { data } = await api.post('/auth/refresh');
-    setAccessToken(data.data.accessToken);
-    return data.data;
-  } catch {
-    const { data } = await api.post('/auth/guest');
-    setAccessToken(data.data.accessToken);
-    return data.data;
-  }
-});
+export const bootstrapSession = createAsyncThunk('auth/bootstrap', () => runBootstrapSession());
 
 /** Clears the current cookie and starts a fresh guest workspace. */
 export const logoutUser = createAsyncThunk('auth/logout', async (_, { dispatch }) => {
