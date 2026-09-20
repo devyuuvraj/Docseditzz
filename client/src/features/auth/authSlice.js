@@ -8,7 +8,9 @@ export const bootstrapSession = createAsyncThunk('auth/bootstrap', async (_, { r
     return await runBootstrapSession();
   } catch (error) {
     const msg =
-      error?.response?.data?.message || error?.message || 'Could not start workspace';
+      error?.response?.data?.message ||
+      (error?.code === 'ECONNABORTED' ? 'API timed out — redeploy Railway from latest main.' : error?.message) ||
+      'Could not start workspace';
     return rejectWithValue({ message: msg });
   }
 });

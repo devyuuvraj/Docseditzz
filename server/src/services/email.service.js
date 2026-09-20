@@ -10,6 +10,9 @@ const getTransporter = () => {
     port: config.smtp.port,
     secure: config.smtp.port === 465,
     auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
   return transporter;
 };
@@ -38,7 +41,14 @@ export const sendEmail = async ({ to, subject, html }) => {
     console.warn(`[email] SMTP not configured. Would send "${subject}" to ${to}`);
     return;
   }
-  await getTransporter().sendMail({ from: config.smtp.from, to, subject, html });
+  const send = getTransporter().sendMail({ from: config.smtp.from, to, subject, html });
+  const timeoutMs = 12000;
+  await Promise.race([
+    send,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('SMTP send timed out')), timeoutMs);
+    }),
+  ]);
 };
 
 export const sendOtpEmail = (to, name, otp) =>

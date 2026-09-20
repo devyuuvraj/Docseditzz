@@ -35,8 +35,6 @@ const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions.j
 export default function App() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isBootstrapping } = useSelector((s) => s.auth);
-
   useEffect(() => {
     dispatch(bootstrapSession());
 
@@ -54,8 +52,6 @@ export default function App() {
       window.removeEventListener('auth:refreshed', onRefreshed);
     };
   }, [dispatch, navigate]);
-
-  if (isBootstrapping) return <PageLoader fullscreen />;
 
   return (
     <Suspense fallback={<PageLoader fullscreen />}>

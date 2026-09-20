@@ -50,23 +50,21 @@ export async function runBootstrapSession() {
     }
   }
 
-  let creds = loadStoredSession();
-  if (!creds) {
-    creds = newBrowserSessionCredentials();
-  }
-
-  try {
-    const { data } = await api.post('/auth/login', creds);
-    storeSession(creds);
-    return applyAuthPayload(data);
-  } catch (loginErr) {
-    const code = loginErr.response?.status;
-    if (code && code !== 401 && code !== 404) {
-      throw loginErr;
+  const stored = loadStoredSession();
+  if (stored) {
+    try {
+      const { data } = await api.post('/auth/login', stored);
+      storeSession(stored);
+      return applyAuthPayload(data);
+    } catch (loginErr) {
+      const code = loginErr.response?.status;
+      if (code && code !== 401 && code !== 404) {
+        throw loginErr;
+      }
     }
   }
 
-  creds = newBrowserSessionCredentials();
+  const creds = newBrowserSessionCredentials();
   const { data } = await api.post('/auth/register', {
     name: 'Guest',
     email: creds.email,
