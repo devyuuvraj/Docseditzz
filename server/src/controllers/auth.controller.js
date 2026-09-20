@@ -103,10 +103,8 @@ const setOtp = async (user) => {
  * When SMTP is not configured in development,
  * expose OTP in API response.
  */
-const devOtpPayload = (otp) =>
-  !config.isProd && !config.smtp.host
-    ? { devOtp: otp }
-    : {};
+/** When SMTP is off, return OTP in the API so signup still works (common on first deploy). */
+const devOtpPayload = (otp) => (!config.smtp.host ? { devOtp: otp } : {});
 
 const devResetPayload = (resetUrl) =>
   !config.isProd && !config.smtp.host
@@ -171,7 +169,14 @@ export const register = asyncHandler(async (req, res) => {
 
   const otp = await setOtp(user);
 
-  await sendOtpEmail(email, name, otp);
+  try {
+    await sendOtpEmail(email, name, otp);
+  } catch (err) {
+    console.error('[auth] OTP email failed:', err?.message || err);
+    if (config.smtp.host) {
+      throw ApiError.internal('Could not send verification email. Try again later.');
+    }
+  }
 
   await logActivity(user.id, 'register', {
     req,

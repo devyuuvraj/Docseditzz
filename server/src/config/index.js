@@ -85,4 +85,28 @@ export const config = {
   },
 };
 
+/** Browser origins allowed for credentialed cross-origin API calls (Vercel → Railway). */
+export function isOriginAllowed(origin) {
+  if (!origin) return true;
+
+  const normalized = origin.replace(/\/$/, '');
+  if (config.corsOrigins.some((o) => o.replace(/\/$/, '') === normalized)) {
+    return true;
+  }
+
+  try {
+    const clientOrigin = new URL(config.clientUrl).origin;
+    if (normalized === clientOrigin) return true;
+  } catch {
+    /* ignore invalid CLIENT_URL */
+  }
+
+  // Vercel production + preview URLs for the same project (e.g. docseditzz.vercel.app)
+  if (config.isProd && /^https:\/\/docseditzz(-[a-z0-9-]+)?\.vercel\.app$/i.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
 export default config;

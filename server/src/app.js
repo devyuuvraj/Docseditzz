@@ -8,7 +8,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import mongoSanitize from 'express-mongo-sanitize';
 import morgan from 'morgan';
-import config from './config/index.js';
+import config, { isOriginAllowed } from './config/index.js';
 import routes from './routes/index.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import { globalLimiter } from './middleware/rateLimiter.js';
@@ -27,8 +27,9 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      if (config.corsOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+      if (isOriginAllowed(origin)) return callback(null, origin);
+      console.warn(`[cors] Blocked origin: ${origin}`);
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],

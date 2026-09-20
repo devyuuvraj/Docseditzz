@@ -87,9 +87,10 @@ Then set in `server/.env`: `CLIENT_URL=https://yourdomain.com` and restart:
    - `VITE_GOOGLE_CLIENT_ID` = same as Railway `GOOGLE_CLIENT_ID`
 4. Deploy → copy the production URL, e.g. `https://docseditzz.vercel.app`.
 5. On **Railway** (API service), set:
-   - `CLIENT_URL` = your Vercel URL (no trailing slash)
-   - `CORS_ORIGINS` = same Vercel URL (comma-separate preview URLs if needed)
-6. Redeploy the Railway service once.
+   - `CLIENT_URL` = `https://docseditzz.vercel.app` (your exact Vercel URL, no trailing slash)
+   - `CORS_ORIGINS` = same URL (optional if using latest server — Vercel origins are auto-allowed)
+6. Redeploy the Railway service after every backend change.
+7. On **Vercel**, confirm `VITE_API_URL` = `https://docseditzz-production.up.railway.app/api/v1` (not a custom domain unless DNS is live).
 
 Open the **Vercel URL** in a browser — that is the public Docseditzz app. The Railway URL is API-only unless you use the root Dockerfile full-stack image.
 
