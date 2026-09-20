@@ -1,0 +1,24 @@
+# Optional: set repo secret RAILWAY_TOKEN (Railway → Account → Tokens)
+# and variable RAILWAY_SERVICE_ID (service settings) to auto-deploy the API on push.
+name: Deploy Railway API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'Dockerfile'
+      - 'railway.toml'
+
+jobs:
+  deploy:
+    if: ${{ secrets.RAILWAY_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway redeploy --service "${{ vars.RAILWAY_SERVICE_ID }}" -y

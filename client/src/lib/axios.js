@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL || '/api/v1';
+const defaultProdApi = 'https://docseditzz-production.up.railway.app/api/v1';
+const baseURL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? defaultProdApi : '/api/v1');
 
 export const api = axios.create({
   baseURL,

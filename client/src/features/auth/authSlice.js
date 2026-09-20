@@ -3,7 +3,15 @@ import api, { setAccessToken } from '../../lib/axios.js';
 import { runBootstrapSession } from './bootstrapSession.js';
 
 /** Restore cookie session or create a new guest workspace (no login UI). */
-export const bootstrapSession = createAsyncThunk('auth/bootstrap', () => runBootstrapSession());
+export const bootstrapSession = createAsyncThunk('auth/bootstrap', async (_, { rejectWithValue }) => {
+  try {
+    return await runBootstrapSession();
+  } catch (error) {
+    const msg =
+      error?.response?.data?.message || error?.message || 'Could not start workspace';
+    return rejectWithValue({ message: msg });
+  }
+});
 
 /** Clears the current cookie and starts a fresh guest workspace. */
 export const logoutUser = createAsyncThunk('auth/logout', async (_, { dispatch }) => {
@@ -21,6 +29,7 @@ const authSlice = createSlice({
     user: null,
     isAuthenticated: false,
     isBootstrapping: true,
+    bootstrapError: null,
   },
   reducers: {
     setCredentials: (state, action) => {
@@ -42,16 +51,19 @@ const authSlice = createSlice({
     builder
       .addCase(bootstrapSession.pending, (state) => {
         state.isBootstrapping = true;
+        state.bootstrapError = null;
       })
       .addCase(bootstrapSession.fulfilled, (state, action) => {
         state.user = action.payload.user;
         state.isAuthenticated = true;
         state.isBootstrapping = false;
+        state.bootstrapError = null;
       })
-      .addCase(bootstrapSession.rejected, (state) => {
+      .addCase(bootstrapSession.rejected, (state, action) => {
         state.user = null;
         state.isAuthenticated = false;
         state.isBootstrapping = false;
+        state.bootstrapError = action.payload?.message || action.error?.message || null;
       })
       .addCase(logoutUser.fulfilled, (state, action) => {
         state.user = action.payload.user;
