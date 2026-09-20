@@ -19,6 +19,8 @@ export const config = {
   isProd: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT || 5000),
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  /** When true, serve the built Vite app from ./public (Railway full-stack image). */
+  serveWeb: process.env.SERVE_WEB === 'true',
 
   jwt: {
     accessSecret: required(

@@ -23,6 +23,8 @@ RUN npx prisma generate
 
 # Copy application source
 COPY src ./src
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh
 
 ENV NODE_ENV=production
 
@@ -30,4 +32,4 @@ EXPOSE 5000
 
 USER node
 
-CMD ["npx", "tsx", "src/server.js"]
+CMD ["./docker-entrypoint.sh"]

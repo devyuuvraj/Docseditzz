@@ -87,9 +87,35 @@ Then set in `server/.env`: `CLIENT_URL=https://yourdomain.com` and restart:
 > production, which works across Vercel ↔ Render domains. Make sure `CLIENT_URL`
 > on the backend exactly matches your frontend origin (no trailing slash).
 
-### Notes for Railway / Fly.io
-Both work the same way — deploy `server/` as a Docker service and the client
-anywhere static. Fly: `fly launch` inside `server/`.
+### Option C — Railway (one URL for app + API)
+
+The repo root **`Dockerfile`** builds the React client and Express API into a
+single container. Railway serves the site at `/` and the API at `/api/v1/*`.
+
+1. In [Railway](https://railway.com) → your project → **Docseditzz** service.
+2. **Settings → Source**: connect `https://github.com/devyuuvraj/Docseditzz`.
+3. **Settings → Build**:
+   - **Root directory**: leave empty (repository root, not `server/`).
+   - **Builder**: Dockerfile (`Dockerfile` at repo root; `railway.toml` is included).
+4. **Variables** (required):
+   - `NODE_ENV=production`
+   - `DATABASE_URL` — Neon/Postgres connection string (Prisma)
+   - `CLIENT_URL=https://docseditzz-production.up.railway.app` (your public Railway URL, no trailing slash)
+   - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` — long random strings
+   - `GEMINI_API_KEY` (or your AI key as configured in `server/src/config`)
+   - `SMTP_*`, `EMAIL_FROM` for OTP email
+   - `GOOGLE_CLIENT_ID` and build arg / var `VITE_GOOGLE_CLIENT_ID` for Google sign-in
+   - `CLOUDINARY_*` for file storage in production
+5. **Networking → Public domain**: generate or attach `docseditzz-production.up.railway.app`.
+6. Redeploy. Verify:
+   - `https://<your-domain>/` → landing page
+   - `https://<your-domain>/api/v1/health` → JSON `{ "status": "ok" }`
+
+If you only deploy `server/` (API-only), the root URL returns JSON/API 404 — use
+`/api/v1/health` to test, or switch to the root Dockerfile as above.
+
+### Notes for Fly.io
+Deploy `server/` as Docker or use the root Dockerfile. Fly: `fly launch` at repo root.
 
 ---
 
