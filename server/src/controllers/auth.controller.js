@@ -174,7 +174,7 @@ export const register = asyncHandler(async (req, res) => {
   } catch (err) {
     console.error('[auth] OTP email failed:', err?.message || err);
     if (config.smtp.host) {
-      throw ApiError.internal('Could not send verification email. Try again later.');
+      throw ApiError.server('Could not send verification email. Try again later.');
     }
   }
 
