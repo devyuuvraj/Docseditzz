@@ -1,5 +1,23 @@
 # 🚀 DOCSEDITZ — Deployment Guide
 
+## Open the app (production)
+
+**Bookmark this:** [https://docseditzz.vercel.app/dashboard](https://docseditzz.vercel.app/dashboard)
+
+No login — the app creates a private guest workspace in your browser automatically.
+
+| Service | URL |
+|--------|-----|
+| **App (use in browser)** | `https://docseditzz.vercel.app/dashboard` |
+| **API (Railway)** | `https://docseditzz-production.up.railway.app/api/v1` |
+
+After every push to `main`, **redeploy Railway** ([your service](https://railway.com/project/af6ed9e5-e15e-46b5-a9c8-652b17c4493a/service/fd29bcc3-05a4-4682-a794-769dd9186b70) → **Deployments** → **Redeploy**).  
+When the backend is current, health includes `"apiVersion": "2026.09-guest"` and `POST /api/v1/auth/guest` works.
+
+Vercel redeploys automatically from `main` (root directory **`client`**, env `VITE_API_URL` = Railway API above).
+
+---
+
 ## 0. Third-party services (one-time setup)
 
 ### MongoDB Atlas
