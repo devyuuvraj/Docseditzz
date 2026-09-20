@@ -18,6 +18,7 @@ router.get('/health', (_req, res) =>
   res.json({
     success: true,
     status: 'ok',
+    apiVersion: '2026.09-guest',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     features: {
