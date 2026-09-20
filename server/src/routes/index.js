@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import config from '../config/index.js';
 import { getAiHealth } from '../services/ai.service.js';
+import { isEmailDeliveryEnabled } from '../services/email.service.js';
 import authRoutes from './auth.routes.js';
 import userRoutes from './user.routes.js';
 import documentRoutes from './document.routes.js';
@@ -18,14 +19,14 @@ router.get('/health', (_req, res) =>
   res.json({
     success: true,
     status: 'ok',
-    apiVersion: '2026.09-session',
+    apiVersion: '2026.09-smtp-safe',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     features: {
       ai: config.openai.enabled,
       aiStatus: getAiHealth(),
       cloudStorage: config.cloudinary.enabled,
-      email: !!config.smtp.host,
+      email: isEmailDeliveryEnabled(),
     },
   })
 );

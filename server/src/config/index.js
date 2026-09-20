@@ -50,6 +50,10 @@ export const config = {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
     from: process.env.EMAIL_FROM || 'DOCSEDITZ <no-reply@docseditz.com>',
+    /** Set DISABLE_EMAIL=true on Railway when not using OTP signup. */
+    get enabled() {
+      return !!(this.host && process.env.DISABLE_EMAIL !== 'true');
+    },
   },
 
   cloudinary: {

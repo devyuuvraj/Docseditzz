@@ -2,6 +2,11 @@ import nodemailer from 'nodemailer';
 import config from '../config/index.js';
 
 let transporter = null;
+/** After a failed send, skip SMTP for this process (broken Railway SMTP creds). */
+let smtpCircuitOpen = false;
+
+export const isEmailDeliveryEnabled = () =>
+  config.smtp.enabled && !smtpCircuitOpen;
 
 const getTransporter = () => {
   if (transporter) return transporter;
@@ -10,9 +15,9 @@ const getTransporter = () => {
     port: config.smtp.port,
     secure: config.smtp.port === 465,
     auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
+    connectionTimeout: 4000,
+    greetingTimeout: 4000,
+    socketTimeout: 5000,
   });
   return transporter;
 };
@@ -37,18 +42,26 @@ const baseTemplate = (title, body) => `
 </html>`;
 
 export const sendEmail = async ({ to, subject, html }) => {
-  if (!config.smtp.host) {
-    console.warn(`[email] SMTP not configured. Would send "${subject}" to ${to}`);
+  if (!isEmailDeliveryEnabled()) {
     return;
   }
+
   const send = getTransporter().sendMail({ from: config.smtp.from, to, subject, html });
-  const timeoutMs = 12000;
-  await Promise.race([
-    send,
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('SMTP send timed out')), timeoutMs);
-    }),
-  ]);
+  const timeoutMs = 5000;
+
+  try {
+    await Promise.race([
+      send,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('SMTP send timed out')), timeoutMs);
+      }),
+    ]);
+  } catch (err) {
+    smtpCircuitOpen = true;
+    transporter = null;
+    console.warn(`[email] SMTP unavailable (${err.message}) — email disabled for this deploy.`);
+    throw err;
+  }
 };
 
 export const sendOtpEmail = (to, name, otp) =>

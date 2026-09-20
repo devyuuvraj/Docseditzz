@@ -271,15 +271,35 @@ export const register = asyncHandler(async (req, res) => {
     });
   }
 
+  if (!config.smtp.enabled) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true, otpHash: null, otpExpiresAt: null },
+    });
+    const accessToken = issueSession(res, user);
+    await logActivity(user.id, 'register', { req });
+    return res.status(201).json({
+      success: true,
+      data: { accessToken, user: toSafeJSON(user) },
+    });
+  }
+
   const otp = await setOtp(user);
 
   try {
     await sendOtpEmail(email, name, otp);
   } catch (err) {
-    console.error('[auth] OTP email failed:', err?.message || err);
-    if (config.smtp.host) {
-      throw ApiError.server('Could not send verification email. Try again later.');
-    }
+    console.warn('[auth] OTP email failed, completing passwordless signup:', err?.message || err);
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true, otpHash: null, otpExpiresAt: null },
+    });
+    const accessToken = issueSession(res, user);
+    await logActivity(user.id, 'register', { req });
+    return res.status(201).json({
+      success: true,
+      data: { accessToken, user: toSafeJSON(user) },
+    });
   }
 
   await logActivity(user.id, 'register', {
