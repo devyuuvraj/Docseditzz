@@ -68,14 +68,15 @@ export default function App() {
   return (
     <Suspense fallback={<PageLoader fullscreen />}>
       <Routes>
-        {/* Public */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Register />} />
-        <Route path="/verify-otp" element={<VerifyOtp />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        {/* Marketing (optional) */}
+        <Route path="/welcome" element={<Landing />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/verify-otp" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/forgot-password" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
         <Route path="/s/:token" element={<SharedFile />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
         {/* Authenticated app */}
         <Route element={<ProtectedRoute />}>

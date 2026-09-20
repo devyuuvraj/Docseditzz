@@ -1,22 +1,27 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api, { setAccessToken } from '../../lib/axios.js';
 
-export const bootstrapSession = createAsyncThunk('auth/bootstrap', async (_, { rejectWithValue }) => {
+/** Restore cookie session or create a new guest workspace (no login UI). */
+export const bootstrapSession = createAsyncThunk('auth/bootstrap', async () => {
   try {
     const { data } = await api.post('/auth/refresh');
     setAccessToken(data.data.accessToken);
     return data.data;
   } catch {
-    return rejectWithValue(null);
+    const { data } = await api.post('/auth/guest');
+    setAccessToken(data.data.accessToken);
+    return data.data;
   }
 });
 
-export const logoutUser = createAsyncThunk('auth/logout', async () => {
+/** Clears the current cookie and starts a fresh guest workspace. */
+export const logoutUser = createAsyncThunk('auth/logout', async (_, { dispatch }) => {
   try {
     await api.post('/auth/logout');
   } finally {
     setAccessToken(null);
   }
+  return dispatch(bootstrapSession()).unwrap();
 });
 
 const authSlice = createSlice({
@@ -44,17 +49,22 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(bootstrapSession.pending, (state) => {
+        state.isBootstrapping = true;
+      })
       .addCase(bootstrapSession.fulfilled, (state, action) => {
         state.user = action.payload.user;
         state.isAuthenticated = true;
         state.isBootstrapping = false;
       })
       .addCase(bootstrapSession.rejected, (state) => {
-        state.isBootstrapping = false;
-      })
-      .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.isAuthenticated = false;
+        state.isBootstrapping = false;
+      })
+      .addCase(logoutUser.fulfilled, (state, action) => {
+        state.user = action.payload.user;
+        state.isAuthenticated = true;
       });
   },
 });

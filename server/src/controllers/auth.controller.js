@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import {logActivity} from "../utils/activity.js";
@@ -110,6 +111,44 @@ const devResetPayload = (resetUrl) =>
   !config.isProd && !config.smtp.host
     ? { devResetUrl: resetUrl }
     : {};
+
+/* -------------------------------------------------------
+   GUEST (passwordless browser workspace)
+------------------------------------------------------- */
+
+/** POST /auth/guest — new private workspace for this browser (cookie-backed). */
+export const createGuest = asyncHandler(async (req, res) => {
+  const email = `guest_${crypto.randomUUID()}@session.docseditz.local`;
+
+  const user = await prisma.user.create({
+    data: {
+      name: 'Guest',
+      email,
+      provider: 'guest',
+      isVerified: true,
+      plan: 'free',
+    },
+  });
+
+  await prisma.subscription.create({
+    data: {
+      userId: user.id,
+      plan: 'free',
+    },
+  });
+
+  const accessToken = issueSession(res, user);
+
+  await logActivity(user.id, 'login', { req, meta: { guest: true } });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      accessToken,
+      user: toSafeJSON(user),
+    },
+  });
+});
 
 /* -------------------------------------------------------
    REGISTER

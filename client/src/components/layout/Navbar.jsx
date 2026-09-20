@@ -43,22 +43,9 @@ export default function Navbar() {
 
           <div className="hidden items-center gap-2 md:flex">
             <ThemeToggle />
-            {isAuthenticated ? (
-              <Link to="/dashboard">
-                <Button size="sm">Dashboard</Button>
-              </Link>
-            ) : (
-              <>
-                <Link to="/login">
-                  <Button variant="ghost" size="sm">
-                    Log in
-                  </Button>
-                </Link>
-                <Link to="/signup">
-                  <Button size="sm">Get started free</Button>
-                </Link>
-              </>
-            )}
+            <Link to="/dashboard">
+              <Button size="sm">{isAuthenticated ? 'Dashboard' : 'Open app'}</Button>
+            </Link>
           </div>
 
           <div className="flex items-center gap-1 md:hidden">
@@ -90,22 +77,9 @@ export default function Navbar() {
               </a>
             ))}
             <div className="flex gap-2 pt-2">
-              {isAuthenticated ? (
-                <Link to="/dashboard" className="flex-1">
-                  <Button className="w-full">Dashboard</Button>
-                </Link>
-              ) : (
-                <>
-                  <Link to="/login" className="flex-1">
-                    <Button variant="secondary" className="w-full">
-                      Log in
-                    </Button>
-                  </Link>
-                  <Link to="/signup" className="flex-1">
-                    <Button className="w-full">Sign up</Button>
-                  </Link>
-                </>
-              )}
+              <Link to="/dashboard" className="flex-1">
+                <Button className="w-full">{isAuthenticated ? 'Dashboard' : 'Open app'}</Button>
+              </Link>
             </div>
           </motion.div>
         )}
