@@ -9,4 +9,4 @@ else
 fi
 
 echo "[deploy] Starting API…"
-exec node src/server.js
+exec npx tsx src/server.js
